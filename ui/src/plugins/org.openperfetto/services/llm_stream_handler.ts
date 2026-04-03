@@ -57,6 +57,7 @@ interface LLMStreamMessage {
  */
 export class LLMStreamHandler {
   private callbacks: LLMStreamCallbacks | null = null;
+  // Track which agent the stream belongs to
   private currentAgentId: string = '';
   private isStreaming: boolean = false;
 
@@ -100,6 +101,13 @@ export class LLMStreamHandler {
    */
   isActive(): boolean {
     return this.isStreaming;
+  }
+
+  /**
+   * 获取当前 Agent ID
+   */
+  getAgentId(): string {
+    return this.currentAgentId;
   }
 
   /**

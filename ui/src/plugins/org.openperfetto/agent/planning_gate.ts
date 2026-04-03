@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {AnalysisPlan, AnalysisPhase} from '../types/agent';
+import {AnalysisPlan} from '../types/agent';
 import {SceneType} from '../types/plugin_state';
 
 /**

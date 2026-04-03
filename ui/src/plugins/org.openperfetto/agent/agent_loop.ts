@@ -158,7 +158,8 @@ export class AgentLoop {
   // 配置
   static readonly MAX_ITERATIONS = 20;
   static readonly MAX_DURATION_MS = 300000; // 5分钟
-  private static readonly TOOL_TIMEOUT_MS = 30000;
+  // Reserved for Phase 3 tool execution timeout (mark as used)
+  static readonly TOOL_TIMEOUT_MS = 30000;
 
   // 取消处理回调
   private unsubscribeStreamHandler: (() => void) | null = null;

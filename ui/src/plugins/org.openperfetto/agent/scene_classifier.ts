@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {Trace} from '../../../public/trace';
+import {NUM, NUM_NULL} from '../../../trace_processor/query_result';
 import {SceneType} from '../types/plugin_state';
 
 /**
@@ -270,8 +271,8 @@ export class SceneClassifier {
         WHERE name LIKE '%ANR%' OR name LIKE '%not responding%'
         LIMIT 1
       `);
-      for (const it = anrResult.iter({cnt: 'number'}); it.valid(); it.next()) {
-        if (it.cnt > 0) return 'anr';
+      for (const it = anrResult.iter({cnt: NUM}); it.valid(); it.next()) {
+        if (Number(it.cnt) > 0) return 'anr';
       }
 
       // 检查是否有大量掉帧（使用NULLIF防除零）
@@ -286,14 +287,15 @@ export class SceneClassifier {
         `);
         for (
           const it = jankResult.iter({
-            jank_count: 'number',
-            jank_rate: 'number',
+            jank_count: NUM,
+            jank_rate: NUM_NULL,
           });
           it.valid();
           it.next()
         ) {
           // jank_rate > 10% 认为是滑动问题
-          if (it.jank_rate && it.jank_rate > 10) return 'scrolling';
+          const rate = it.jank_rate !== null ? Number(it.jank_rate) : 0;
+          if (rate > 10) return 'scrolling';
         }
       } catch {
         // Frame timeline 表可能不存在
@@ -309,11 +311,11 @@ export class SceneClassifier {
         LIMIT 1
       `);
       for (
-        const it = startupResult.iter({cnt: 'number'});
+        const it = startupResult.iter({cnt: NUM});
         it.valid();
         it.next()
       ) {
-        if (it.cnt > 0) return 'startup_cold';
+        if (Number(it.cnt) > 0) return 'startup_cold';
       }
 
       // 检查是否有 Binder 阻塞
@@ -327,13 +329,14 @@ export class SceneClassifier {
         `);
         for (
           const it = binderResult.iter({
-            cnt: 'number',
-            avg_dur_ms: 'number',
+            cnt: NUM,
+            avg_dur_ms: NUM_NULL,
           });
           it.valid();
           it.next()
         ) {
-          if (it.avg_dur_ms && it.avg_dur_ms > 50) return 'binder_blocking';
+          const avgDur = it.avg_dur_ms !== null ? Number(it.avg_dur_ms) : 0;
+          if (avgDur > 50) return 'binder_blocking';
         }
       } catch {
         // Binder 数据可能不存在
@@ -349,11 +352,11 @@ export class SceneClassifier {
              OR name LIKE '%Lock%'
         `);
         for (
-          const it = lockResult.iter({cnt: 'number'});
+          const it = lockResult.iter({cnt: NUM});
           it.valid();
           it.next()
         ) {
-          if (it.cnt > 10) return 'lock_contention';
+          if (Number(it.cnt) > 10) return 'lock_contention';
         }
       } catch {
         // 忽略错误

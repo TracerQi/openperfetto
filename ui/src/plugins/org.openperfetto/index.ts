@@ -14,7 +14,8 @@
 
 import m from 'mithril';
 import {PerfettoPlugin} from '../../public/plugin';
-import {App, RouteArgs} from '../../public/app';
+import {App} from '../../public/app';
+import {RouteArgs} from '../../public/route_schema';
 import {Trace} from '../../public/trace';
 import {Store} from '../../base/store';
 import {OpenPerfettoPage} from './sidebar/openperfetto_page';
@@ -52,7 +53,8 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
     Integrates intelligent Agent for automated trace analysis.
   `;
 
-  private readonly trace: Trace;
+  // Reference to trace - will be used in Phase 3+ for Tool execution
+  readonly trace: Trace;
   private store: Store<OpenPerfettoState> | null = null;
   private wsClient: WebSocketClient | null = null;
   private agentLoop: AgentLoop | null = null;
@@ -115,7 +117,7 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
 
     // 3. 创建 AgentLoop 实例
     this.agentLoop = new AgentLoop(ctx, this.store, {
-      onProgress: (progress) => {
+      onProgress: (_progress) => {
         // 进度回调，触发 UI 更新
         m.redraw();
       },

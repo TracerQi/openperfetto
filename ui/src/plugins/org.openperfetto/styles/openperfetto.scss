@@ -254,3 +254,403 @@ $spacing-lg: 16px;
     border-color: var(--pf-color-divider-dark, #444);
   }
 }
+
+// ============================================================================
+// AIChat Component
+// ============================================================================
+.aichat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+// Status bar
+.aichat__status {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-xs $spacing-md;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  border-bottom: 1px solid var(--pf-color-divider, #e0e0e0);
+  font-size: 12px;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #333);
+    border-bottom-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.aichat__status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &--idle {
+    background-color: #9e9e9e;
+  }
+
+  &--working {
+    background-color: #1a73e8;
+    animation: pulse 1.5s infinite;
+  }
+
+  &--complete {
+    background-color: #4caf50;
+  }
+
+  &--error {
+    background-color: #f44336;
+  }
+}
+
+.aichat__status-text {
+  flex: 1;
+  color: var(--pf-color-text-secondary, #666);
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+}
+
+.aichat__cancel-btn {
+  padding: $spacing-xs $spacing-sm;
+  font-size: 11px;
+  background-color: transparent;
+  border: 1px solid var(--pf-color-divider, #ccc);
+  border-radius: $border-radius;
+  cursor: pointer;
+  color: var(--pf-color-text-secondary, #666);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: #f44336;
+    border-color: #f44336;
+    color: white;
+  }
+}
+
+// Progress bar
+.aichat__progress {
+  height: 3px;
+  background-color: var(--pf-color-divider, #e0e0e0);
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.aichat__progress-bar {
+  height: 100%;
+  background-color: var(--pf-color-primary, #1a73e8);
+  transition: width 0.3s ease;
+}
+
+// Messages container
+.aichat__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-md;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.aichat__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--pf-color-text-secondary, #999);
+  font-size: 13px;
+  text-align: center;
+}
+
+// Message bubbles
+.aichat__message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+
+  &--user {
+    align-self: flex-end;
+  }
+
+  &--assistant {
+    align-self: flex-start;
+  }
+}
+
+.aichat__message-content {
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius * 3;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+
+  .aichat__message--user & {
+    background-color: var(--pf-color-primary, #1a73e8);
+    color: white;
+    border-bottom-right-radius: $border-radius;
+  }
+
+  .aichat__message--assistant & {
+    background-color: var(--pf-color-surface-variant, #f0f0f0);
+    color: var(--pf-color-text, #333);
+    border-bottom-left-radius: $border-radius;
+
+    .openperfetto-page--dark & {
+      background-color: var(--pf-color-surface-variant-dark, #3a3a3a);
+      color: var(--pf-color-text-dark, #e0e0e0);
+    }
+  }
+
+  // Markdown rendering
+  strong {
+    font-weight: 600;
+  }
+
+  code {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+
+    .openperfetto-page--dark & {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+
+  pre {
+    background-color: rgba(0, 0, 0, 0.08);
+    padding: $spacing-sm;
+    border-radius: $border-radius;
+    overflow-x: auto;
+    margin: $spacing-xs 0;
+
+    code {
+      background: none;
+      padding: 0;
+    }
+
+    .openperfetto-page--dark & {
+      background-color: rgba(0, 0, 0, 0.3);
+    }
+  }
+}
+
+.aichat__message-time {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #999);
+  margin-top: 2px;
+  padding: 0 $spacing-sm;
+
+  .aichat__message--user & {
+    text-align: right;
+  }
+}
+
+// Typing indicator / cursor
+.aichat__typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background-color: var(--pf-color-primary, #1a73e8);
+  margin-left: 2px;
+  animation: blink 1s infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+// Tool call card
+.aichat__tool-call {
+  margin: $spacing-xs 0;
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  overflow: hidden;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.aichat__tool-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-sm;
+  background-color: var(--pf-color-surface-variant, #e8e8e8);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #ddd);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #404040);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #4a4a4a);
+    }
+  }
+}
+
+.aichat__tool-icon {
+  font-size: 14px;
+}
+
+.aichat__tool-name {
+  flex: 1;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.aichat__tool-toggle {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.aichat__tool-body {
+  padding: $spacing-sm;
+  background-color: var(--pf-color-surface, #fafafa);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2a2a2a);
+  }
+
+  &--collapsed {
+    display: none;
+  }
+}
+
+.aichat__tool-status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+
+  &--pending {
+    background-color: #fff3e0;
+    color: #e65100;
+  }
+
+  &--success {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &--error {
+    background-color: #ffebee;
+    color: #c62828;
+  }
+
+  .openperfetto-page--dark & {
+    &--pending {
+      background-color: #3e2723;
+      color: #ffb74d;
+    }
+
+    &--success {
+      background-color: #1b5e20;
+      color: #81c784;
+    }
+
+    &--error {
+      background-color: #4a1c1c;
+      color: #ef9a9a;
+    }
+  }
+}
+
+// Input area
+.aichat__input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  border-top: 1px solid var(--pf-color-divider, #e0e0e0);
+  background-color: var(--pf-color-surface, white);
+
+  .openperfetto-page--dark & {
+    border-top-color: var(--pf-color-divider-dark, #444);
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+  }
+}
+
+.aichat__input {
+  flex: 1;
+  min-height: 36px;
+  max-height: 120px;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--pf-color-divider, #ccc);
+  border-radius: 18px;
+  resize: none;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.2s ease;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  color: var(--pf-color-text, #333);
+
+  &:focus {
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  &::placeholder {
+    color: var(--pf-color-text-secondary, #999);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #3a3a3a);
+    border-color: var(--pf-color-divider-dark, #555);
+    color: var(--pf-color-text-dark, #e0e0e0);
+
+    &::placeholder {
+      color: var(--pf-color-text-secondary-dark, #777);
+    }
+  }
+}
+
+.aichat__send-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover:not(:disabled) {
+    background-color: var(--pf-color-primary-dark, #1557b0);
+    transform: scale(1.05);
+  }
+
+  &:disabled {
+    background-color: var(--pf-color-divider, #ccc);
+    cursor: not-allowed;
+  }
+}

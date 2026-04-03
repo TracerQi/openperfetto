@@ -144,7 +144,8 @@ export class OpenPerfettoPage
     moduleKey: keyof typeof this.moduleCollapsed,
     title: string,
     icon: string,
-    locale: 'zh' | 'en',
+    // Reserved for future i18n support
+    _locale: 'zh' | 'en',
     content: m.Children,
     isFlexGrow = false,
   ): m.Children {

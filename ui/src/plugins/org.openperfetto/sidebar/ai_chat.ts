@@ -17,8 +17,9 @@ import {Trace} from '../../../public/trace';
 import {Store} from '../../../base/store';
 import {OpenPerfettoState} from '../types/plugin_state';
 import {ChatMessage} from '../types/agent';
-import {AgentLoop, AgentLoopState, AgentProgress} from '../agent/agent_loop';
-import {t} from '../i18n';
+import {AgentLoop, AgentLoopState} from '../agent/agent_loop';
+// t() function will be used when i18n is implemented
+import {t as _t} from '../i18n';
 import {Icon} from '../../../widgets/icon';
 
 /**
@@ -47,12 +48,10 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
   private inputText: string = '';
   private messagesContainer: HTMLElement | null = null;
   private shouldScrollToBottom: boolean = true;
-  private progress: AgentProgress | null = null;
 
-  oninit(vnode: m.Vnode<AIChatAttrs>): void {
-    // 设置进度回调
-    const agentLoop = vnode.attrs.agentLoop;
-    // AgentLoop 的 onProgress 在构造时设置
+  oninit(_vnode: m.Vnode<AIChatAttrs>): void {
+    // AgentLoop's onProgress is set in the plugin constructor
+    // Future: may use vnode.attrs.agentLoop for additional setup
   }
 
   oncreate(vnode: m.VnodeDOM<AIChatAttrs>): void {
@@ -62,7 +61,7 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     this.scrollToBottom();
   }
 
-  onupdate(vnode: m.VnodeDOM<AIChatAttrs>): void {
+  onupdate(_vnode: m.VnodeDOM<AIChatAttrs>): void {
     if (this.shouldScrollToBottom) {
       this.scrollToBottom();
     }

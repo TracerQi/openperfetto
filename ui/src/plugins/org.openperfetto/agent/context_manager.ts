@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {Trace} from '../../../public/trace';
+import {NUM} from '../../../trace_processor/query_result';
 import {SceneType} from '../types/plugin_state';
 import {ChatMessage} from '../types/agent';
 
@@ -46,15 +47,16 @@ interface SceneBudgetConfig {
  */
 export class ContextManager {
   private trace: Trace;
-  private currentSceneType: SceneType = 'general';
+  private _currentSceneType: SceneType = 'general';
   private systemPrompt: string = '';
-  private currentBudget: TokenBudgetConfig;
+  // Current budget config, updated when scene changes
+  private _currentBudget: TokenBudgetConfig;
 
   /** 基础 Token 预算 */
-  private static readonly BASE_BUDGET = 8192;
+  static readonly BASE_BUDGET = 8192;
 
   /** 复杂场景 Token 预算 */
-  private static readonly COMPLEX_BUDGET = 16384;
+  static readonly COMPLEX_BUDGET = 16384;
 
   /** 场景预算配置表 */
   private static readonly SCENE_BUDGETS: Record<SceneType, SceneBudgetConfig> =
@@ -173,7 +175,7 @@ export class ContextManager {
 
   constructor(trace: Trace) {
     this.trace = trace;
-    this.currentBudget = this.calculateBudget('general');
+    this._currentBudget = this.calculateBudget('general');
   }
 
   /**
@@ -197,15 +199,22 @@ export class ContextManager {
    * 获取当前预算配置
    */
   getBudget(): TokenBudgetConfig {
-    return {...this.currentBudget};
+    return {...this._currentBudget};
+  }
+
+  /**
+   * 获取当前场景类型
+   */
+  getCurrentSceneType(): SceneType {
+    return this._currentSceneType;
   }
 
   /**
    * 根据场景构建完整上下文
    */
   async buildContext(sceneType: SceneType): Promise<void> {
-    this.currentSceneType = sceneType;
-    this.currentBudget = this.calculateBudget(sceneType);
+    this._currentSceneType = sceneType;
+    this._currentBudget = this.calculateBudget(sceneType);
 
     const parts: string[] = [];
 
@@ -232,7 +241,7 @@ export class ContextManager {
    * 构建上下文消息（裁剪历史保持在预算内）
    */
   buildContextMessages(messages: ChatMessage[]): ChatMessage[] {
-    const historyBudget = this.currentBudget.history;
+    const historyBudget = this._currentBudget.history;
     let totalTokens = 0;
     const result: ChatMessage[] = [];
 
@@ -541,8 +550,8 @@ ${processes.map((p) => `- ${p}`).join('\n')}
       const result = await this.trace.engine.query(
         `SELECT COUNT(*) as cnt FROM actual_frame_timeline_slice LIMIT 1`,
       );
-      for (const it = result.iter({cnt: 'number'}); it.valid(); it.next()) {
-        return it.cnt > 0;
+      for (const it = result.iter({cnt: NUM}); it.valid(); it.next()) {
+        return Number(it.cnt) > 0;
       }
     } catch {
       return false;
@@ -555,8 +564,8 @@ ${processes.map((p) => `- ${p}`).join('\n')}
       const result = await this.trace.engine.query(
         `SELECT COUNT(*) as cnt FROM slice WHERE name LIKE 'binder%' LIMIT 1`,
       );
-      for (const it = result.iter({cnt: 'number'}); it.valid(); it.next()) {
-        return it.cnt > 0;
+      for (const it = result.iter({cnt: NUM}); it.valid(); it.next()) {
+        return Number(it.cnt) > 0;
       }
     } catch {
       return false;
@@ -569,8 +578,8 @@ ${processes.map((p) => `- ${p}`).join('\n')}
       const result = await this.trace.engine.query(
         `SELECT COUNT(*) as cnt FROM counter WHERE name LIKE 'mem.%' LIMIT 1`,
       );
-      for (const it = result.iter({cnt: 'number'}); it.valid(); it.next()) {
-        return it.cnt > 0;
+      for (const it = result.iter({cnt: NUM}); it.valid(); it.next()) {
+        return Number(it.cnt) > 0;
       }
     } catch {
       return false;
