@@ -1,0 +1,256 @@
+// Copyright (C) 2026 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// OpenPerfetto Plugin Styles
+// 复用 Perfetto 的 CSS 变量体系 (--pf-color-*)
+
+// ============================================================================
+// Variables
+// ============================================================================
+$topbar-height: 48px;
+$footer-height: 48px;
+$module-header-height: 40px;
+$border-radius: 4px;
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+
+// ============================================================================
+// Main Page Layout
+// ============================================================================
+.openperfetto-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: var(--pf-color-surface);
+  color: var(--pf-color-text);
+  font-family: var(--pf-font-family, 'Roboto', sans-serif);
+
+  // Dark theme modifier
+  &--dark {
+    background-color: var(--pf-color-surface-dark, #1e1e1e);
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+}
+
+.openperfetto-page__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: $spacing-sm;
+  gap: $spacing-sm;
+}
+
+.openperfetto-page__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: $footer-height;
+  padding: 0 $spacing-md;
+  border-top: 1px solid var(--pf-color-divider, #e0e0e0);
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+
+  .openperfetto-page--dark & {
+    border-top-color: var(--pf-color-divider-dark, #333);
+    background-color: var(--pf-color-surface-variant-dark, #2d2d2d);
+  }
+}
+
+// ============================================================================
+// TopBar
+// ============================================================================
+.openperfetto-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: $topbar-height;
+  padding: 0 $spacing-md;
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+  flex-shrink: 0;
+}
+
+.openperfetto-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.openperfetto-topbar__logo {
+  font-size: 24px;
+}
+
+.openperfetto-topbar__title {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.openperfetto-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.openperfetto-topbar__connection {
+  display: flex;
+  align-items: center;
+  padding: $spacing-xs $spacing-sm;
+  cursor: help;
+}
+
+.openperfetto-topbar__connection-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+
+  &--connected {
+    background-color: #4caf50; // Green
+    box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+  }
+
+  &--connecting {
+    background-color: #ffc107; // Yellow/Amber
+    animation: pulse 1.5s infinite;
+  }
+
+  &--disconnected {
+    background-color: #9e9e9e; // Gray
+  }
+
+  &--error {
+    background-color: #f44336; // Red
+    box-shadow: 0 0 4px rgba(244, 67, 54, 0.5);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+// ============================================================================
+// Module (Collapsible Sections)
+// ============================================================================
+.openperfetto-module {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--pf-color-divider, #e0e0e0);
+  border-radius: $border-radius;
+  background-color: var(--pf-color-surface, white);
+  overflow: hidden;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+  }
+
+  &--collapsed {
+    .openperfetto-module__content {
+      display: none;
+    }
+  }
+
+  &--flex {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+.openperfetto-module__header {
+  display: flex;
+  align-items: center;
+  height: $module-header-height;
+  padding: 0 $spacing-md;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #eeeeee);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #383838);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #444);
+    }
+  }
+}
+
+.openperfetto-module__icon {
+  font-size: 18px;
+  margin-right: $spacing-sm;
+  color: var(--pf-color-primary, #1a73e8);
+}
+
+.openperfetto-module__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.openperfetto-module__toggle {
+  font-size: 20px;
+  color: var(--pf-color-text-secondary, #666);
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+}
+
+.openperfetto-module__content {
+  padding: $spacing-md;
+  overflow-y: auto;
+
+  &--flex {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+// ============================================================================
+// Placeholder (For Phase 1)
+// ============================================================================
+.openperfetto-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-lg;
+  color: var(--pf-color-text-secondary, #666);
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+  background-color: var(--pf-color-surface-variant, #f9f9f9);
+  border-radius: $border-radius;
+  border: 1px dashed var(--pf-color-divider, #ddd);
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #888);
+    background-color: var(--pf-color-surface-variant-dark, #2a2a2a);
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}

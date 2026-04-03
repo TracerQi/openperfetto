@@ -1,0 +1,49 @@
+server:
+  host: "0.0.0.0"
+  port: 3001
+  requestTimeout: 30000
+  connectionTimeout: 10000
+
+cors:
+  origins:
+    - "http://localhost:10000"
+    - "http://localhost:3000"
+  credentials: true
+
+websocket:
+  heartbeatInterval: 30000   # 30秒心跳间隔
+  heartbeatTimeout: 90000    # 90秒超时
+  maxConnections: 100
+  maxConnectionsPerUser: 5
+  maxBufferedAmount: 1048576 # 1MB 背压阈值
+  zombieCleanupInterval: 30000
+
+llm:
+  defaultProvider: "openai"
+  providers:
+    openai:
+      apiKey: "${OPENAI_API_KEY}"
+      model: "gpt-4o"
+      maxTokens: 16384
+    anthropic:
+      apiKey: "${ANTHROPIC_API_KEY}"
+      model: "claude-sonnet-4-20250514"
+      maxTokens: 16384
+
+skills:
+  libraryPath: "./skills/library"
+
+session:
+  store: "memory"
+  ttlMs: 86400000            # 24小时
+  cleanupIntervalMs: 3600000 # 1小时清理一次
+  maxSessions: 10000
+
+log:
+  level: "info"
+  prettyPrint: true
+
+rateLimit:
+  enabled: true
+  max: 100
+  timeWindow: "1 minute"
