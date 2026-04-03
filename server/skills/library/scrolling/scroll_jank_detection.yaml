@@ -1,0 +1,94 @@
+# Scroll Jank Detection Skill
+# 检测滚动过程中的掉帧和卡顿
+
+id: scroll_jank_detection
+name: Scroll Jank Detection
+description: |
+  检测滚动过程中的掉帧，返回每帧的耗时、jank类型和责任方。
+  分析 actual_frame_timeline_slice 表找出丢帧的帧。
+version: "1.0"
+type: sql_query
+scene: scrolling
+tags:
+  - jank
+  - frame
+  - scroll
+  - performance
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名（支持模糊匹配）"
+  - name: time_range_start
+    type: integer
+    required: false
+    description: "分析起始时间（纳秒）"
+  - name: time_range_end
+    type: integer
+    required: false
+    description: "分析结束时间（纳秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 200
+    min: 1
+    max: 1000
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    f.id AS frame_id,
+    f.ts,
+    ROUND(f.dur / 1e6, 2) AS dur_ms,
+    f.jank_type,
+    CASE
+      WHEN f.jank_type LIKE '%App%' THEN 'app'
+      WHEN f.jank_type LIKE '%SurfaceFlinger%' THEN 'sf'
+      WHEN f.jank_type LIKE '%Buffer%' THEN 'buffer'
+      WHEN f.jank_type IS NULL OR f.jank_type = '' THEN 'none'
+      ELSE 'unknown'
+    END AS blame_layer,
+    f.on_time_finish,
+    f.layer_name
+  FROM actual_frame_timeline_slice f
+  JOIN process p ON f.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    ${time_range_start ? "AND f.ts >= " + time_range_start : ""}
+    ${time_range_end ? "AND f.ts <= " + time_range_end : ""}
+  ORDER BY f.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: frame_id
+      type: integer
+      description: "帧 ID"
+    - name: ts
+      type: timestamp
+      unit: ns
+      description: "帧开始时间戳"
+    - name: dur_ms
+      type: float
+      unit: ms
+      description: "帧持续时间"
+    - name: jank_type
+      type: string
+      description: "卡顿类型"
+    - name: blame_layer
+      type: string
+      description: "责任方 (app/sf/buffer/none/unknown)"
+    - name: on_time_finish
+      type: boolean
+      description: "是否按时完成"
+    - name: layer_name
+      type: string
+      description: "图层名称"
+  display_level: detail
+
+related_skills:
+  - frame_timeline_analysis
+  - render_thread_analysis
+related_tools:
+  - navigate_timeline
+  - mark_position

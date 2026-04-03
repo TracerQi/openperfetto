@@ -1,0 +1,89 @@
+# Frame Timeline Analysis Skill
+# 帧时间线详细分析
+
+id: frame_timeline_analysis
+name: Frame Timeline Analysis
+description: |
+  分析帧时间线，包括预期帧和实际帧的对比，
+  计算掉帧率、平均帧时间等统计指标。
+version: "1.0"
+type: sql_query
+scene: scrolling
+tags:
+  - frame
+  - timeline
+  - statistics
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: time_range_start
+    type: integer
+    required: false
+    description: "分析起始时间（纳秒）"
+  - name: time_range_end
+    type: integer
+    required: false
+    description: "分析结束时间（纳秒）"
+
+sql_template: |
+  WITH frame_stats AS (
+    SELECT
+      COUNT(*) AS total_frames,
+      COUNT(CASE WHEN f.jank_type IS NOT NULL AND f.jank_type != '' THEN 1 END) AS jank_frames,
+      AVG(f.dur) / 1e6 AS avg_dur_ms,
+      MAX(f.dur) / 1e6 AS max_dur_ms,
+      MIN(f.dur) / 1e6 AS min_dur_ms
+    FROM actual_frame_timeline_slice f
+    JOIN process p ON f.upid = p.upid
+    WHERE p.name LIKE '%${process_name}%'
+      ${time_range_start ? "AND f.ts >= " + time_range_start : ""}
+      ${time_range_end ? "AND f.ts <= " + time_range_end : ""}
+  )
+  SELECT
+    total_frames,
+    jank_frames,
+    ROUND(jank_frames * 100.0 / total_frames, 2) AS jank_rate_pct,
+    ROUND(avg_dur_ms, 2) AS avg_dur_ms,
+    ROUND(max_dur_ms, 2) AS max_dur_ms,
+    ROUND(min_dur_ms, 2) AS min_dur_ms,
+    CASE
+      WHEN avg_dur_ms <= 16.67 THEN '60fps'
+      WHEN avg_dur_ms <= 33.33 THEN '30fps'
+      ELSE 'below_30fps'
+    END AS estimated_fps_tier
+  FROM frame_stats
+
+output_schema:
+  columns:
+    - name: total_frames
+      type: integer
+      description: "总帧数"
+    - name: jank_frames
+      type: integer
+      description: "掉帧数"
+    - name: jank_rate_pct
+      type: float
+      unit: "%"
+      description: "掉帧率"
+    - name: avg_dur_ms
+      type: float
+      unit: ms
+      description: "平均帧时间"
+    - name: max_dur_ms
+      type: float
+      unit: ms
+      description: "最大帧时间"
+    - name: min_dur_ms
+      type: float
+      unit: ms
+      description: "最小帧时间"
+    - name: estimated_fps_tier
+      type: string
+      description: "估算帧率档位"
+  display_level: summary
+
+related_skills:
+  - scroll_jank_detection

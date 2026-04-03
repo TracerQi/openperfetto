@@ -16,6 +16,10 @@ import { setupHealthRoutes } from './routes/health.js';
 import { LLMProxy } from './services/llm_proxy.js';
 import { SessionManager } from './services/session_manager.js';
 import { SkillMarkerParser } from './services/skill_marker_parser.js';
+import { SkillRegistry } from './services/skill_registry.js';
+import { SkillProcessor } from './services/skill_processor.js';
+import { SqlSanitizer } from './utils/sql_sanitizer.js';
+import { setupSkillsRoutes, setSkillsRouteDependencies } from './routes/skills.js';
 
 // ============= 扩展 FastifyRequest 类型 =============
 
@@ -201,16 +205,35 @@ async function buildServer(config: ServerConfig): Promise<{
   const llmProxy = new LLMProxy(config.llm);
   const sessionManager = new SessionManager(config.session);
   const skillMarkerParser = new SkillMarkerParser();
+  const sqlSanitizer = new SqlSanitizer();
+  const skillRegistry = new SkillRegistry();
+  
+  // 初始化 SkillRegistry（加载 Skills）
+  const skillsLibraryPath = config.skills?.libraryPath || './skills/library';
+  await skillRegistry.initialize(skillsLibraryPath);
+  logger.info(`Loaded ${skillRegistry.count()} skills from ${skillsLibraryPath}`);
+  
+  // 初始化 SkillProcessor
+  const skillProcessor = new SkillProcessor(skillRegistry, sqlSanitizer);
   
   // 设置 WebSocket 路由依赖
   setWebSocketDependencies({
     llmProxy,
     sessionManager,
     skillMarkerParser,
+    skillRegistry,
+    skillProcessor,
+  });
+  
+  // 设置 Skills REST API 依赖
+  setSkillsRouteDependencies({
+    skillRegistry,
+    skillProcessor,
   });
   
   setupWebSocketRoutes(server);
   setupHealthRoutes(server);
+  setupSkillsRoutes(server);
 
   return { server, sessionManager };
 }

@@ -648,6 +648,10 @@ export class LLMProxy {
     maxDelayMs: 8000,  // 8秒
   };
   
+  // 流式响应超时配置
+  private static readonly STREAM_TIMEOUT_MS = 30000; // 30秒无数据则超时
+  private static readonly STREAM_CHECK_INTERVAL_MS = 5000; // 每5秒检查一次
+  
   constructor(config?: LLMConfig) {
     this.config = config || getConfig().llm;
     this.tokenMeter = new TokenMeter();
@@ -773,7 +777,7 @@ export class LLMProxy {
   }
   
   /**
-   * 核心聊天方法（流式）
+   * 核心聊天方法（流式），包含流超时保护
    */
   async *chat(request: LLMRequest): AsyncGenerator<LLMStreamChunk> {
     let lastError: Error | undefined;
@@ -802,31 +806,59 @@ export class LLMProxy {
           }
         }
         
-        // 执行请求
+        // 执行请求，带流超时保护
         let inputTokens = 0;
         let outputTokens = 0;
+        let lastDataTime = Date.now();
+        let streamTimedOut = false;
         
-        for await (const chunk of provider.chat(request)) {
-          if (chunk.type === 'done' && chunk.usage) {
-            inputTokens = chunk.usage.inputTokens;
-            outputTokens = chunk.usage.outputTokens;
+        // 启动超时检查定时器
+        const timeoutCheck = setInterval(() => {
+          if (Date.now() - lastDataTime > LLMProxy.STREAM_TIMEOUT_MS) {
+            streamTimedOut = true;
           }
-          yield chunk;
-          
-          // 成功收到响应，记录成功
-          if (chunk.type === 'done') {
-            this.circuitBreakers.get(providerName)?.recordSuccess();
-            rateLimiter?.recordRequest(inputTokens + outputTokens);
+        }, LLMProxy.STREAM_CHECK_INTERVAL_MS);
+        
+        try {
+          for await (const chunk of provider.chat(request)) {
+            // 检查是否超时
+            if (streamTimedOut) {
+              logger.warn('LLM stream timeout: no data received for 30 seconds', {
+                provider: providerName,
+              });
+              yield {
+                type: 'error',
+                message: 'LLM stream timeout: no data received for 30 seconds',
+              };
+              return;
+            }
             
-            // 记录 token 使用
-            this.tokenMeter.recordUsage({
-              inputTokens,
-              outputTokens,
-              provider: providerName,
-              model: this.config.providers[providerName]?.model || 'unknown',
-              timestamp: Date.now(),
-            });
+            // 更新最后数据时间
+            lastDataTime = Date.now();
+            
+            if (chunk.type === 'done' && chunk.usage) {
+              inputTokens = chunk.usage.inputTokens;
+              outputTokens = chunk.usage.outputTokens;
+            }
+            yield chunk;
+            
+            // 成功收到响应，记录成功
+            if (chunk.type === 'done') {
+              this.circuitBreakers.get(providerName)?.recordSuccess();
+              rateLimiter?.recordRequest(inputTokens + outputTokens);
+              
+              // 记录 token 使用
+              this.tokenMeter.recordUsage({
+                inputTokens,
+                outputTokens,
+                provider: providerName,
+                model: this.config.providers[providerName]?.model || 'unknown',
+                timestamp: Date.now(),
+              });
+            }
           }
+        } finally {
+          clearInterval(timeoutCheck);
         }
         
         return; // 成功完成

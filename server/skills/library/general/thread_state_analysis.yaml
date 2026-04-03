@@ -1,0 +1,63 @@
+# Thread State Analysis Skill
+# 线程状态分析
+
+id: thread_state_analysis
+name: Thread State Analysis
+description: |
+  分析线程状态分布，包括 Running、Runnable、Sleeping 等状态的时间占比。
+version: "1.0"
+type: sql_query
+scene: general
+tags:
+  - thread
+  - state
+  - scheduling
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: thread_name
+    type: string
+    required: false
+    description: "线程名过滤（可选）"
+
+sql_template: |
+  SELECT
+    t.name AS thread_name,
+    t.tid,
+    ts.state,
+    COUNT(*) AS state_count,
+    ROUND(SUM(ts.dur) / 1e6, 2) AS total_dur_ms,
+    p.name AS process_name
+  FROM thread_state ts
+  JOIN thread t ON ts.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    ${thread_name ? "AND t.name LIKE '%" + thread_name + "%'" : ""}
+  GROUP BY t.utid, ts.state
+  ORDER BY total_dur_ms DESC
+  LIMIT 100
+
+output_schema:
+  columns:
+    - name: thread_name
+      type: string
+    - name: tid
+      type: integer
+    - name: state
+      type: string
+      description: "线程状态 (Running/Runnable/Sleeping/etc.)"
+    - name: state_count
+      type: integer
+    - name: total_dur_ms
+      type: float
+      unit: ms
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - process_overview
+  - cpu_scheduling_analysis

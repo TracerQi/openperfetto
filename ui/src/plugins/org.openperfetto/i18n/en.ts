@@ -29,11 +29,14 @@ export const en: Record<string, string> = {
   'searchPin.title': 'Search & Pin',
   'searchPin.placeholder': 'Search process/thread name...',
   'searchPin.noResults': 'No results',
+  'searchPin.searching': 'Searching...',
   'searchPin.pinAll': 'Pin All',
   'searchPin.unpinAll': 'Unpin All',
   'searchPin.presets': 'Preset Scenes',
   'searchPin.savePreset': 'Save as Preset',
   'searchPin.deletePreset': 'Delete Preset',
+  'searchPin.history': 'Search History',
+  'searchPin.applyPreset': 'Apply Preset',
 
   // Markers Module
   'markers.title': 'Markers & Jump',
@@ -44,6 +47,9 @@ export const en: Record<string, string> = {
   'markers.severity.info': 'Info',
   'markers.severity.warning': 'Warning',
   'markers.severity.error': 'Error',
+  'markers.syncFromSession': 'Sync AI Markers',
+  'markers.clearAll': 'Clear All',
+  'markers.editNote': 'Edit Note',
 
   // AI Chat Module
   'aiChat.title': 'AI Chat',
@@ -64,6 +70,16 @@ export const en: Record<string, string> = {
   'settings.connection': 'Connection Settings',
   'settings.serverUrl': 'Server URL',
   'settings.reconnect': 'Reconnect',
+  'settings.general': 'General',
+  'settings.presets': 'Preset Scenes',
+  'settings.about': 'About',
+  'settings.newPreset': 'New Preset',
+  'settings.editPreset': 'Edit Preset',
+  'settings.presetName': 'Preset Name',
+  'settings.threadRules': 'Thread Rules',
+  'settings.addRule': 'Add Rule',
+  'settings.processPattern': 'Process Pattern',
+  'settings.threadPattern': 'Thread Pattern',
 
   // Common
   'common.loading': 'Loading...',

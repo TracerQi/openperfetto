@@ -1,0 +1,66 @@
+# Process Overview Skill
+# 进程概览
+
+id: process_overview
+name: Process Overview
+description: |
+  获取进程的基本信息概览，包括进程名、PID、线程数等。
+version: "1.0"
+type: sql_query
+scene: general
+tags:
+  - process
+  - overview
+  - basic
+
+parameters:
+  - name: process_name
+    type: string
+    required: false
+    description: "进程名过滤（可选）"
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    p.upid,
+    p.pid,
+    p.name AS process_name,
+    p.start_ts,
+    p.end_ts,
+    ROUND((COALESCE(p.end_ts, (SELECT MAX(ts) FROM slice)) - p.start_ts) / 1e9, 2) AS duration_sec,
+    (SELECT COUNT(*) FROM thread t WHERE t.upid = p.upid) AS thread_count
+  FROM process p
+  WHERE p.name IS NOT NULL
+    ${process_name ? "AND p.name LIKE '%" + process_name + "%'" : ""}
+  ORDER BY p.start_ts
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: upid
+      type: integer
+      description: "进程唯一 ID"
+    - name: pid
+      type: integer
+      description: "进程 ID"
+    - name: process_name
+      type: string
+    - name: start_ts
+      type: timestamp
+      unit: ns
+    - name: end_ts
+      type: timestamp
+      unit: ns
+    - name: duration_sec
+      type: float
+      unit: s
+    - name: thread_count
+      type: integer
+  display_level: summary
+
+related_skills:
+  - thread_state_analysis

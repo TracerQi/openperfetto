@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src/",
-    "test": "jest"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
@@ -28,6 +28,7 @@
     "@types/ws": "^8.18.1",
     "eslint": "^9.0.0",
     "jest": "^30.0.0",
+    "ts-jest": "^29.4.9",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }

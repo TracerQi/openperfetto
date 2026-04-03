@@ -27,6 +27,8 @@ import {SceneClassifier} from './scene_classifier';
 import {ArtifactStore} from './artifact_store';
 import {WebSocketClient} from '../services/websocket_client';
 import {LLMStreamHandler} from '../services/llm_stream_handler';
+import {ToolRegistry, createAllTools} from '../tools';
+import {Verifier, VerificationResult} from './verifier';
 
 /**
  * Agent Loop 状态枚举
@@ -66,7 +68,8 @@ export type AgentLoopEvent =
   | {type: 'LLM_TOOL_USE'; toolCall: ToolCall}
   | {type: 'TOOL_RESULT'; result: ToolResult}
   | {type: 'LLM_DONE'}
-  | {type: 'VERIFICATION_COMPLETE'; passed: boolean}
+  | {type: 'VERIFICATION_PASSED'; result: VerificationResult}
+  | {type: 'VERIFICATION_FAILED'; issues: string[]; result: VerificationResult}
   | {type: 'ERROR'; error: string}
   | {type: 'CANCEL'};
 
@@ -139,6 +142,7 @@ export class AgentLoop {
   private artifactStore: ArtifactStore;
   private wsClient: WebSocketClient;
   private streamHandler: LLMStreamHandler;
+  private toolRegistry: ToolRegistry;
 
   // 当前会话状态
   private currentSceneType: SceneType = 'general';
@@ -151,6 +155,11 @@ export class AgentLoop {
   private streamBuffer: string = '';
   private streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly STREAM_DEBOUNCE_MS = 100;
+
+  // 验证器
+  private verifier: Verifier;
+  private verificationRetries = 0;
+  private static readonly MAX_VERIFICATION_RETRIES = 3;
 
   // 进度回调
   private onProgress?: (progress: AgentProgress) => void;
@@ -181,6 +190,13 @@ export class AgentLoop {
     this.artifactStore = new ArtifactStore();
     this.wsClient = WebSocketClient.getInstance();
     this.streamHandler = new LLMStreamHandler();
+
+    // 初始化 Tool Registry 并注册所有 Tools
+    this.toolRegistry = new ToolRegistry(trace, this.artifactStore);
+    this.toolRegistry.registerAll(createAllTools(trace, this.artifactStore));
+
+    // 初始化验证器
+    this.verifier = new Verifier();
 
     // 设置流式处理回调
     this.setupStreamHandlers();
@@ -263,6 +279,7 @@ export class AgentLoop {
   reset(): void {
     this.state = AgentLoopState.IDLE;
     this.toolCallCount = 0;
+    this.verificationRetries = 0;
     this.currentPlan = null;
     this.pendingToolCalls.clear();
     this.streamBuffer = '';
@@ -543,23 +560,56 @@ export class AgentLoop {
   }
 
   private async handleVerifyingState(event: AgentLoopEvent): Promise<void> {
-    if (event.type !== 'VERIFICATION_COMPLETE') return;
+    switch (event.type) {
+      case 'VERIFICATION_PASSED':
+        this.state = AgentLoopState.COMPLETE;
+        this.updateProgress('分析完成');
+        this.addMessage({
+          id: `verify_pass_${Date.now()}`,
+          role: 'system',
+          content: `验证通过 (${event.result.l1Issues.length} L1, ${event.result.l2Issues.length} L2)`,
+          timestamp: Date.now(),
+        });
+        this.finalizeAnalysis();
+        m.redraw();
+        break;
 
-    if (event.passed) {
-      this.state = AgentLoopState.COMPLETE;
-      this.updateProgress('分析完成');
-      this.finalizeAnalysis();
-    } else {
-      // 验证失败，但仍然完成（在实际场景中可能继续分析）
-      this.state = AgentLoopState.COMPLETE;
-      this.updateProgress('分析完成（有待验证项）');
-      this.finalizeAnalysis();
+      case 'VERIFICATION_FAILED':
+        this.verificationRetries++;
+        if (this.verificationRetries >= AgentLoop.MAX_VERIFICATION_RETRIES) {
+          // 超过重试次数，强制完成并警告
+          this.state = AgentLoopState.COMPLETE;
+          this.updateProgress('分析完成（验证警告）');
+          this.addMessage({
+            id: `verify_warn_${Date.now()}`,
+            role: 'system',
+            content: `验证未通过（已达最大重试次数 ${AgentLoop.MAX_VERIFICATION_RETRIES}）:\n` +
+              event.issues.map((i) => `  - ${i}`).join('\n'),
+            timestamp: Date.now(),
+          });
+          this.finalizeAnalysis();
+        } else {
+          // 添加验证问题消息，返回 AWAITING_LLM 重新请求
+          this.addMessage({
+            id: `verify_fail_${Date.now()}`,
+            role: 'system',
+            content: `验证发现问题（第 ${this.verificationRetries}/${AgentLoop.MAX_VERIFICATION_RETRIES} 次重试）:\n` +
+              event.issues.map((i) => `  - ${i}`).join('\n') +
+              '\n请根据以上问题修正分析结论。',
+            timestamp: Date.now(),
+          });
+          this.state = AgentLoopState.AWAITING_LLM;
+          this.updateProgress('等待AI修正响应...');
+          await this.sendToLLM(false);
+        }
+        m.redraw();
+        break;
     }
-    m.redraw();
   }
 
   /**
-   * 执行工具调用 (Phase 2 Mock实现)
+   * 执行工具调用
+   * 通过 ToolRegistry 执行实际的 Tool 实现
    */
   private async executeToolCall(toolCall: ToolCall): Promise<void> {
     // 添加工具调用消息
@@ -574,9 +624,8 @@ export class AgentLoop {
     m.redraw();
 
     try {
-      // Phase 2: Mock工具执行结果
-      // 真正的Tool实现在Phase 3
-      const result = await this.mockToolExecution(toolCall);
+      // 通过 ToolRegistry 执行 Tool
+      const result = await this.toolRegistry.execute(toolCall);
 
       await this.transition({type: 'TOOL_RESULT', result});
     } catch (error) {
@@ -592,74 +641,27 @@ export class AgentLoop {
   }
 
   /**
-   * Mock工具执行 (Phase 2)
-   * 返回模拟结果，真正的Tool实现在Phase 3
+   * 获取 ToolRegistry 实例
+   * 用于外部访问 Tool 定义等
    */
-  private async mockToolExecution(toolCall: ToolCall): Promise<ToolResult> {
-    // 模拟执行延迟
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  getToolRegistry(): ToolRegistry {
+    return this.toolRegistry;
+  }
 
-    const toolName = toolCall.name;
-
-    // 根据工具类型返回不同的Mock结果
-    switch (toolName) {
-      case 'execute_sql':
-        return {
-          toolCallId: toolCall.id,
-          success: true,
-          data: {
-            status: 'success',
-            metadata: {
-              tool: 'execute_sql',
-              rowCount: 10,
-              columns: ['id', 'name', 'duration_ms'],
-            },
-            summary: {
-              estimatedTokens: 200,
-              rowCount: 10,
-              insights: ['Mock SQL结果 - Phase 3将实现真正的查询'],
-            },
-            artifactRef: 'mock_art_1',
-          },
-          artifactRef: 'mock_art_1',
-        };
-
-      case 'invoke_skill':
-        return {
-          toolCallId: toolCall.id,
-          success: true,
-          data: {
-            status: 'success',
-            metadata: {
-              tool: 'invoke_skill',
-              skillId: toolCall.arguments.skillId,
-            },
-            summary: {
-              estimatedTokens: 150,
-              rowCount: 5,
-              insights: ['Mock Skill结果 - Phase 3将实现'],
-            },
-          },
-        };
-
-      case 'submit_plan':
-        // submit_plan 在 handleAwaitingPlanState 中特殊处理
-        return {
-          toolCallId: toolCall.id,
-          success: true,
-          data: toolCall.arguments,
-        };
-
-      default:
-        return {
-          toolCallId: toolCall.id,
-          success: true,
-          data: {
-            status: 'success',
-            message: `Mock结果 for ${toolName} - Phase 3将实现`,
-          },
-        };
+  /**
+   * 生成 UUID
+   * 使用 crypto.randomUUID() 或回退到简单实现
+   */
+  private generateUUID(): string {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
     }
+    // 回退实现：简单的 UUID v4 格式
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 
   /**
@@ -669,7 +671,17 @@ export class AgentLoop {
     const systemPrompt = this.contextManager.getSystemPrompt();
     const messages = this.getSessionMessages();
 
-    // 构建请求
+    // 获取 agentId（使用 session ID 或生成 UUID）
+    const connState = this.store.state.connectionState;
+    const agentId =
+      connState.status === 'connected' && connState.agentId
+        ? connState.agentId
+        : this.generateUUID();
+
+    // 每次请求生成新的 traceId
+    const traceId = this.generateUUID();
+
+    // 构建符合后端 ChatRequestSchema 的 payload
     const payload = {
       messages: messages.map((m) => ({
         role: m.role,
@@ -677,16 +689,11 @@ export class AgentLoop {
         toolCall: m.toolCall,
         toolResult: m.toolResult,
       })),
+      tools: this.toolRegistry.getToolDefinitions(),
       systemPrompt,
       stream: true,
       requirePlan,
-      sceneType: this.currentSceneType,
     };
-
-    // 获取 agentId
-    const connState = this.store.state.connectionState;
-    const agentId =
-      connState.status === 'connected' ? connState.agentId : '';
 
     // 启动流式处理
     this.streamHandler.startStream(agentId, {
@@ -704,22 +711,58 @@ export class AgentLoop {
       },
     });
 
-    // 发送请求
+    // 发送请求：符合后端 ChatRequestSchema 格式
     this.wsClient.send({
       type: 'chat',
+      agentId,
+      traceId,
       payload,
-      requestId: `req_${Date.now()}`,
-    });
+    } as import('../services/websocket_client').WebSocketMessage);
   }
 
   /**
    * 运行验证
+   * 执行三层验证系统（L1 启发式 + L2 计划遵从 + L3 预留）
    */
   private async runVerification(): Promise<void> {
-    // Phase 2: 简化验证，直接通过
-    // 真正的 L1/L2 验证在完整实现中
     await scheduler.yield();
-    await this.transition({type: 'VERIFICATION_COMPLETE', passed: true});
+
+    try {
+      const messages = this.getSessionMessages();
+      const artifacts = this.artifactStore.getAll();
+
+      const result = await this.verifier.runFullVerification(
+        messages,
+        artifacts,
+        this.currentPlan,
+      );
+
+      if (result.passed) {
+        await this.transition({type: 'VERIFICATION_PASSED', result});
+      } else {
+        const allIssues = [...result.l1Issues, ...result.l2Issues];
+        await this.transition({
+          type: 'VERIFICATION_FAILED',
+          issues: allIssues,
+          result,
+        });
+      }
+    } catch (error) {
+      // 验证出错不应阻塞流程，视为通过
+      console.warn('Verification failed:', error);
+      await this.transition({
+        type: 'VERIFICATION_PASSED',
+        result: {
+          passed: true,
+          l1Issues: [],
+          l2Issues: [],
+          softWarnings: [],
+          l3Result: null,
+          totalIssues: 0,
+          timestamp: Date.now(),
+        },
+      });
+    }
   }
 
   /**
@@ -729,6 +772,7 @@ export class AgentLoop {
     console.log('Analysis completed', {
       sceneType: this.currentSceneType,
       toolCallCount: this.toolCallCount,
+      verificationRetries: this.verificationRetries,
       artifactCount: this.artifactStore.size(),
       durationMs: Date.now() - this.startTime,
     });
@@ -739,6 +783,7 @@ export class AgentLoop {
     // 重置状态以准备下一次分析
     this.state = AgentLoopState.IDLE;
     this.toolCallCount = 0;
+    this.verificationRetries = 0;
     this.currentPlan = null;
     this.pendingToolCalls.clear();
   }

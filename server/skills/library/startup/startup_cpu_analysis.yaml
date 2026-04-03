@@ -1,0 +1,72 @@
+# Startup CPU Analysis Skill
+# 启动 CPU 分析
+
+id: startup_cpu_analysis
+name: Startup CPU Analysis
+description: |
+  分析应用启动过程中的 CPU 使用情况，
+  包括各线程的 CPU 占用和调度情况。
+version: "1.0"
+type: sql_query
+scene: startup
+tags:
+  - startup
+  - cpu
+  - scheduling
+
+parameters:
+  - name: package_name
+    type: string
+    required: true
+    description: "应用包名"
+  - name: time_range_start
+    type: integer
+    required: false
+    description: "分析起始时间（纳秒）"
+  - name: time_range_end
+    type: integer
+    required: false
+    description: "分析结束时间（纳秒）"
+
+sql_template: |
+  SELECT
+    t.name AS thread_name,
+    t.tid,
+    COUNT(*) AS sched_count,
+    ROUND(SUM(sched.dur) / 1e6, 2) AS total_running_ms,
+    ROUND(AVG(sched.dur) / 1e6, 4) AS avg_slice_ms,
+    p.name AS process_name
+  FROM sched_slice sched
+  JOIN thread t ON sched.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${package_name}%'
+    ${time_range_start ? "AND sched.ts >= " + time_range_start : ""}
+    ${time_range_end ? "AND sched.ts <= " + time_range_end : ""}
+  GROUP BY t.utid
+  ORDER BY total_running_ms DESC
+  LIMIT 20
+
+output_schema:
+  columns:
+    - name: thread_name
+      type: string
+    - name: tid
+      type: integer
+    - name: sched_count
+      type: integer
+      description: "调度次数"
+    - name: total_running_ms
+      type: float
+      unit: ms
+      description: "总运行时间"
+    - name: avg_slice_ms
+      type: float
+      unit: ms
+      description: "平均时间片"
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - app_startup_breakdown
+  - cpu_scheduling_analysis

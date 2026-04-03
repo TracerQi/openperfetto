@@ -72,7 +72,7 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
     // Phase 1: 初始化 WebSocket 连接（可配置）
     const wsClient = WebSocketClient.getInstance();
     // TODO: Phase 5 - 从设置中读取 URL
-    wsClient.setUrl('ws://localhost:8765');
+    wsClient.setUrl('ws://localhost:8765/ws');
 
     // 尝试连接（如果后端可用）
     // 注意：Phase 1 中后端可能不存在，连接会失败并自动重试

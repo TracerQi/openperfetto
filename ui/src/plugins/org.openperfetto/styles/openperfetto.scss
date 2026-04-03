@@ -654,3 +654,780 @@ $spacing-lg: 16px;
     cursor: not-allowed;
   }
 }
+
+// ============================================================================
+// SearchPin Component
+// ============================================================================
+.openperfetto-search-pin {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.openperfetto-search-pin__search-box {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.openperfetto-search-pin__input {
+  flex: 1;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--pf-color-divider, #ccc);
+  border-radius: $border-radius;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  background-color: var(--pf-color-surface, white);
+  color: var(--pf-color-text, #333);
+
+  &:focus {
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  &::placeholder {
+    color: var(--pf-color-text-secondary, #999);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+    border-color: var(--pf-color-divider-dark, #555);
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+}
+
+.openperfetto-search-pin__history {
+  position: relative;
+  background-color: var(--pf-color-surface, white);
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-search-pin__history-header {
+  padding: $spacing-xs $spacing-sm;
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #666);
+  border-bottom: 1px solid var(--pf-color-divider, #eee);
+}
+
+.openperfetto-search-pin__history-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-sm;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #f5f5f5);
+  }
+
+  .openperfetto-page--dark &:hover {
+    background-color: var(--pf-color-surface-hover-dark, #3a3a3a);
+  }
+}
+
+.openperfetto-search-pin__results {
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  overflow: hidden;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-search-pin__results-header {
+  padding: $spacing-xs $spacing-sm;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  border-bottom: 1px solid var(--pf-color-divider, #ddd);
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #383838);
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-search-pin__results-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.openperfetto-search-pin__result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-xs $spacing-sm;
+  border-bottom: 1px solid var(--pf-color-divider, #eee);
+  transition: background-color 0.2s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #f9f9f9);
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #3a3a3a);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #3a3a3a);
+    }
+  }
+}
+
+.openperfetto-search-pin__result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.openperfetto-search-pin__result-process {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.openperfetto-search-pin__result-thread {
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.openperfetto-search-pin__result-ids {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #999);
+  font-family: 'Roboto Mono', monospace;
+}
+
+.openperfetto-search-pin__result-actions {
+  display: flex;
+  gap: $spacing-xs;
+}
+
+.openperfetto-search-pin__no-results {
+  padding: $spacing-md;
+  text-align: center;
+  color: var(--pf-color-text-secondary, #666);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.openperfetto-search-pin__presets {
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  overflow: hidden;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-search-pin__presets-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-sm;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #eee);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #383838);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #444);
+    }
+  }
+}
+
+.openperfetto-search-pin__presets-toggle {
+  margin-left: auto;
+}
+
+.openperfetto-search-pin__presets-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.openperfetto-search-pin__presets-empty {
+  padding: $spacing-sm;
+  text-align: center;
+  color: var(--pf-color-text-secondary, #666);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.openperfetto-search-pin__preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-xs $spacing-sm;
+  border-bottom: 1px solid var(--pf-color-divider, #eee);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #3a3a3a);
+  }
+}
+
+.openperfetto-search-pin__preset-info {
+  flex: 1;
+}
+
+.openperfetto-search-pin__preset-name {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.openperfetto-search-pin__preset-count {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-search-pin__preset-actions {
+  display: flex;
+  gap: $spacing-xs;
+}
+
+// ============================================================================
+// MarkersJump Component
+// ============================================================================
+.openperfetto-markers {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.openperfetto-markers__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-xs 0;
+}
+
+.openperfetto-markers__count {
+  font-size: 12px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-markers__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-lg;
+  color: var(--pf-color-text-secondary, #999);
+  font-size: 13px;
+  gap: $spacing-sm;
+}
+
+.openperfetto-markers__list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.openperfetto-markers__item {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-sm;
+  padding: $spacing-sm;
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #f5f5f5);
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #3a3a3a);
+    }
+  }
+}
+
+.openperfetto-markers__item-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.openperfetto-markers__index {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-markers__severity {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+
+  &--info {
+    background-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  &--warning {
+    background-color: #ff9800;
+  }
+
+  &--error {
+    background-color: #f44336;
+  }
+}
+
+.openperfetto-markers__item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.openperfetto-markers__name {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.openperfetto-markers__meta {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: 2px;
+}
+
+.openperfetto-markers__timestamp {
+  font-size: 10px;
+  font-family: 'Roboto Mono', monospace;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-markers__duration {
+  font-size: 10px;
+  font-family: 'Roboto Mono', monospace;
+  color: var(--pf-color-primary, #1a73e8);
+}
+
+.openperfetto-markers__note {
+  margin-top: $spacing-xs;
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #666);
+  padding: $spacing-xs;
+  background-color: var(--pf-color-surface-variant, #f9f9f9);
+  border-radius: $border-radius;
+  cursor: text;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #f0f0f0);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #333);
+
+    &:hover {
+      background-color: var(--pf-color-surface-hover-dark, #3a3a3a);
+    }
+  }
+}
+
+.openperfetto-markers__note-editor {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  margin-top: $spacing-xs;
+}
+
+.openperfetto-markers__note-input {
+  flex: 1;
+  padding: $spacing-xs $spacing-sm;
+  border: 1px solid var(--pf-color-primary, #1a73e8);
+  border-radius: $border-radius;
+  font-size: 11px;
+  outline: none;
+  background-color: var(--pf-color-surface, white);
+  color: var(--pf-color-text, #333);
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+}
+
+.openperfetto-markers__item-actions {
+  display: flex;
+  gap: $spacing-xs;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  .openperfetto-markers__item:hover & {
+    opacity: 1;
+  }
+}
+
+// ============================================================================
+// Settings Component
+// ============================================================================
+.openperfetto-settings__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.openperfetto-settings__panel {
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  background-color: var(--pf-color-surface, white);
+  border-radius: $border-radius * 2;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+  }
+}
+
+.openperfetto-settings__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md $spacing-lg;
+  border-bottom: 1px solid var(--pf-color-divider, #e0e0e0);
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-settings__title {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.openperfetto-settings__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--pf-color-divider, #e0e0e0);
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-settings__tab {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-md;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-surface-hover, #f5f5f5);
+  }
+
+  &--active {
+    border-bottom-color: var(--pf-color-primary, #1a73e8);
+    color: var(--pf-color-primary, #1a73e8);
+  }
+
+  .openperfetto-page--dark &:hover {
+    background-color: var(--pf-color-surface-hover-dark, #3a3a3a);
+  }
+}
+
+.openperfetto-settings__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-lg;
+}
+
+.openperfetto-settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+}
+
+.openperfetto-settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.openperfetto-settings__group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-settings__option-row {
+  display: flex;
+  gap: $spacing-sm;
+}
+
+.openperfetto-settings__option {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+
+  &:hover {
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  &--selected {
+    border-color: var(--pf-color-primary, #1a73e8);
+    background-color: rgba(26, 115, 232, 0.1);
+    color: var(--pf-color-primary, #1a73e8);
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #555);
+
+    &--selected {
+      background-color: rgba(26, 115, 232, 0.2);
+    }
+  }
+}
+
+.openperfetto-settings__presets-toolbar {
+  margin-bottom: $spacing-md;
+}
+
+.openperfetto-settings__presets-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.openperfetto-settings__presets-empty {
+  padding: $spacing-lg;
+  text-align: center;
+  color: var(--pf-color-text-secondary, #666);
+  font-style: italic;
+}
+
+.openperfetto-settings__preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+  }
+}
+
+.openperfetto-settings__preset-info {
+  flex: 1;
+}
+
+.openperfetto-settings__preset-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.openperfetto-settings__preset-count {
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-settings__preset-date {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #999);
+}
+
+.openperfetto-settings__preset-actions {
+  display: flex;
+  gap: $spacing-xs;
+}
+
+.openperfetto-settings__preset-form {
+  padding: $spacing-md;
+  border: 1px solid var(--pf-color-primary, #1a73e8);
+  border-radius: $border-radius;
+  background-color: var(--pf-color-surface-variant, #f9f9f9);
+  margin-bottom: $spacing-md;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #333);
+  }
+}
+
+.openperfetto-settings__form-header {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: $spacing-md;
+}
+
+.openperfetto-settings__form-group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-md;
+
+  label {
+    font-size: 12px;
+    color: var(--pf-color-text-secondary, #666);
+  }
+}
+
+.openperfetto-settings__form-input {
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--pf-color-divider, #ccc);
+  border-radius: $border-radius;
+  font-size: 13px;
+  outline: none;
+  background-color: var(--pf-color-surface, white);
+  color: var(--pf-color-text, #333);
+
+  &:focus {
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-dark, #2d2d2d);
+    border-color: var(--pf-color-divider-dark, #555);
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+}
+
+.openperfetto-settings__thread-rules {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-sm;
+}
+
+.openperfetto-settings__thread-rule {
+  display: flex;
+  gap: $spacing-xs;
+  align-items: center;
+
+  input {
+    flex: 1;
+  }
+}
+
+.openperfetto-settings__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+  margin-top: $spacing-md;
+}
+
+.openperfetto-settings__about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: $spacing-md;
+}
+
+.openperfetto-settings__about-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background-color: var(--pf-color-primary, #1a73e8);
+  border-radius: 50%;
+}
+
+.openperfetto-settings__about-icon {
+  font-size: 36px;
+  color: white;
+}
+
+.openperfetto-settings__about-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.openperfetto-settings__about-version {
+  font-size: 12px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-settings__about-description {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 300px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-settings__about-links {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.openperfetto-settings__about-link {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  color: var(--pf-color-primary, #1a73e8);
+  text-decoration: none;
+  font-size: 12px;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.openperfetto-settings__about-copyright {
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #999);
+  margin-top: $spacing-md;
+}

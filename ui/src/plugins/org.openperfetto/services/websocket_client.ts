@@ -20,7 +20,10 @@ import {ConnectionState} from '../types/plugin_state';
 export interface WebSocketMessage {
   type: string;
   payload?: unknown;
+  data?: unknown;  // 后端使用 data 字段
   requestId?: string;
+  traceId?: string;
+  timestamp?: number;  // 用于 ping/pong
 }
 
 type StateChangeCallback = (state: ConnectionState) => void;
@@ -39,7 +42,7 @@ export class WebSocketClient {
   private static instance: WebSocketClient | null = null;
 
   private ws: WebSocket | null = null;
-  private url: string = 'ws://localhost:8765';
+  private url: string = 'ws://localhost:8765/ws';
   private connectionState: ConnectionState = {status: 'disconnected'};
 
   // 重连相关
@@ -51,6 +54,11 @@ export class WebSocketClient {
   // 心跳相关
   private readonly heartbeatInterval = 30000; // 心跳间隔 30s
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  // 离线消息队列
+  private pendingMessages: Array<{data: unknown; timestamp: number}> = [];
+  private static readonly MAX_PENDING_MESSAGES = 50;
+  private static readonly PENDING_MESSAGE_TTL = 30000; // 30秒
 
   // 回调
   private stateChangeCallbacks: Set<StateChangeCallback> = new Set();
@@ -123,19 +131,41 @@ export class WebSocketClient {
 
   /**
    * 发送消息
+   * 如果 WebSocket 未连接，会将消息缓存到队列中
    */
   send(message: WebSocketMessage): boolean {
-    if (this.ws?.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket is not connected, cannot send message');
-      return false;
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(message));
+        return true;
+      } catch (error) {
+        console.error('Failed to send WebSocket message:', error);
+        return false;
+      }
     }
 
-    try {
-      this.ws.send(JSON.stringify(message));
-      return true;
-    } catch (error) {
-      console.error('Failed to send WebSocket message:', error);
-      return false;
+    // 缓存消息（非 ping 类型）
+    if (message.type !== 'ping') {
+      this.pendingMessages.push({data: message, timestamp: Date.now()});
+      if (this.pendingMessages.length > WebSocketClient.MAX_PENDING_MESSAGES) {
+        this.pendingMessages.shift(); // 丢弃最旧的
+      }
+      console.warn('WebSocket is not connected, message queued');
+    }
+    return false;
+  }
+
+  /**
+   * 发送队列中的待发送消息
+   */
+  private flushPendingMessages(): void {
+    const now = Date.now();
+    const validMessages = this.pendingMessages.filter(
+      (m) => now - m.timestamp < WebSocketClient.PENDING_MESSAGE_TTL,
+    );
+    this.pendingMessages = [];
+    for (const msg of validMessages) {
+      this.send(msg.data as WebSocketMessage);
     }
   }
 
@@ -165,6 +195,7 @@ export class WebSocketClient {
       this.reconnectAttempts = 0;
       this.updateState({status: 'connected', agentId: this.generateAgentId()});
       this.startHeartbeat();
+      this.flushPendingMessages();
     };
 
     this.ws.onclose = (event) => {
@@ -187,7 +218,13 @@ export class WebSocketClient {
 
     this.ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data) as WebSocketMessage;
+        const rawMessage = JSON.parse(event.data) as WebSocketMessage;
+
+        // 将后端的 data 字段映射为 payload（兼容处理）
+        const message: WebSocketMessage = {
+          ...rawMessage,
+          payload: rawMessage.payload ?? rawMessage.data,
+        };
 
         // 处理 pong 响应
         if (message.type === 'pong') {
@@ -245,7 +282,7 @@ export class WebSocketClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
-      this.send({type: 'ping'});
+      this.send({type: 'ping', timestamp: Date.now()});
     }, this.heartbeatInterval);
   }
 
@@ -256,7 +293,18 @@ export class WebSocketClient {
     }
   }
 
+  /**
+   * 生成符合 UUID v4 格式的 agentId
+   */
   private generateAgentId(): string {
-    return `agent_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // 回退实现：UUID v4 格式
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 }

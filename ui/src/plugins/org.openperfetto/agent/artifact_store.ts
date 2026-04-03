@@ -32,11 +32,13 @@ import {
  * - 自动识别洞察
  */
 export class ArtifactStore {
+  private static readonly MAX_ARTIFACTS = 100;
   private artifacts: Map<string, Artifact> = new Map();
   private idCounter = 0;
 
   /**
    * 存储完整数据并生成摘要
+   * 使用 LRU 策略限制存储大小
    */
   store(
     type: ArtifactType,
@@ -44,6 +46,14 @@ export class ArtifactStore {
     sourceTool: string,
     sourceQuery?: string,
   ): Artifact {
+    // LRU: 如果达到上限，删除最早的条目
+    if (this.artifacts.size >= ArtifactStore.MAX_ARTIFACTS) {
+      const firstKey = this.artifacts.keys().next().value;
+      if (firstKey !== undefined) {
+        this.artifacts.delete(firstKey);
+      }
+    }
+
     const id = `art_${++this.idCounter}`;
 
     const artifact: Artifact = {

@@ -1,0 +1,71 @@
+# Mutex Wait Analysis Skill
+# 互斥锁等待分析
+
+id: mutex_wait_analysis
+name: Mutex Wait Analysis
+description: |
+  深入分析互斥锁等待情况，包括等待者和持有者信息。
+version: "1.0"
+type: sql_query
+scene: lock
+tags:
+  - lock
+  - mutex
+  - wait
+  - blocking
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: min_wait_ms
+    type: float
+    required: false
+    default: 5.0
+    description: "最小等待时间（毫秒）"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS wait_ms,
+    s.name AS mutex_info,
+    s.depth,
+    t.name AS waiter_thread,
+    t.tid AS waiter_tid,
+    p.name AS process_name
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND s.name LIKE '%mutex%' OR s.name LIKE '%Mutex%'
+    AND s.dur >= ${min_wait_ms} * 1e6
+  ORDER BY s.dur DESC
+  LIMIT 30
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: wait_ms
+      type: float
+      unit: ms
+    - name: mutex_info
+      type: string
+    - name: depth
+      type: integer
+    - name: waiter_thread
+      type: string
+    - name: waiter_tid
+      type: integer
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - lock_contention_analysis

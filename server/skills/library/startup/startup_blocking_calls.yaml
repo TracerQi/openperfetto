@@ -1,0 +1,81 @@
+# Startup Blocking Calls Skill
+# 启动阻塞调用分析
+
+id: startup_blocking_calls
+name: Startup Blocking Calls
+description: |
+  分析应用启动过程中主线程上的阻塞调用，
+  包括 Binder 调用、IO 操作、锁等待等。
+version: "1.0"
+type: sql_query
+scene: startup
+tags:
+  - startup
+  - blocking
+  - main_thread
+
+parameters:
+  - name: package_name
+    type: string
+    required: true
+    description: "应用包名"
+  - name: min_dur_ms
+    type: float
+    required: false
+    default: 5.0
+    description: "最小阻塞时间阈值（毫秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS slice_name,
+    CASE
+      WHEN s.name LIKE 'binder%' OR s.name LIKE 'Binder%' THEN 'binder'
+      WHEN s.name LIKE '%Lock%' OR s.name LIKE '%Monitor%' THEN 'lock'
+      WHEN s.name LIKE '%IO%' OR s.name LIKE '%read%' OR s.name LIKE '%write%' THEN 'io'
+      WHEN s.name LIKE '%sleep%' OR s.name LIKE '%wait%' THEN 'wait'
+      WHEN s.name LIKE '%network%' OR s.name LIKE '%socket%' THEN 'network'
+      ELSE 'other'
+    END AS blocking_type,
+    t.name AS thread_name,
+    p.name AS process_name
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${package_name}%'
+    AND t.is_main_thread = 1
+    AND s.dur >= ${min_dur_ms} * 1e6
+  ORDER BY s.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: slice_name
+      type: string
+    - name: blocking_type
+      type: string
+    - name: thread_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - app_startup_breakdown
+  - main_thread_blocking

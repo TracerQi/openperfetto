@@ -1,0 +1,68 @@
+# Allocation Hotspot Skill
+# 内存分配热点分析
+
+id: allocation_hotspot
+name: Allocation Hotspot Analysis
+description: |
+  分析内存分配热点，找出频繁分配内存的调用栈。
+version: "1.0"
+type: sql_query
+scene: memory
+tags:
+  - memory
+  - allocation
+  - heap
+  - hotspot
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: min_size_kb
+    type: integer
+    required: false
+    default: 10
+    description: "最小分配大小（KB）"
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    ha.ts,
+    ha.callsite_id,
+    ROUND(ha.size / 1024.0, 2) AS size_kb,
+    ha.count AS alloc_count,
+    hcs.name AS callsite_name,
+    p.name AS process_name
+  FROM heap_profile_allocation ha
+  JOIN heap_profile_callsite hcs ON ha.callsite_id = hcs.id
+  JOIN process p ON ha.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND ha.size >= ${min_size_kb} * 1024
+  ORDER BY ha.size DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: callsite_id
+      type: integer
+    - name: size_kb
+      type: float
+      unit: KB
+    - name: alloc_count
+      type: integer
+    - name: callsite_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - memory_trend_analysis

@@ -1,0 +1,66 @@
+# Network IO Analysis Skill
+# 网络 IO 分析
+
+id: network_io_analysis
+name: Network IO Analysis
+description: |
+  分析网络 IO 操作，包括 Socket 读写、网络延迟等。
+version: "1.0"
+type: sql_query
+scene: network
+tags:
+  - network
+  - io
+  - socket
+
+parameters:
+  - name: process_name
+    type: string
+    required: false
+    description: "目标进程名（可选）"
+  - name: min_dur_ms
+    type: float
+    required: false
+    default: 10.0
+    description: "最小操作时间（毫秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS operation_name,
+    t.name AS thread_name,
+    p.name AS process_name
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE (s.name LIKE '%network%' OR s.name LIKE '%socket%' OR s.name LIKE '%http%' OR s.name LIKE '%tcp%' OR s.name LIKE '%ssl%')
+    AND s.dur >= ${min_dur_ms} * 1e6
+    ${process_name ? "AND p.name LIKE '%" + process_name + "%'" : ""}
+  ORDER BY s.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: operation_name
+      type: string
+    - name: thread_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail

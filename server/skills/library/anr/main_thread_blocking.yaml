@@ -1,0 +1,74 @@
+# Main Thread Blocking Skill
+# 主线程阻塞分析
+
+id: main_thread_blocking
+name: Main Thread Blocking Analysis
+description: |
+  分析主线程上的阻塞操作，找出导致 ANR 或卡顿的原因。
+version: "1.0"
+type: sql_query
+scene: anr
+tags:
+  - anr
+  - main_thread
+  - blocking
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: min_dur_ms
+    type: float
+    required: false
+    default: 100.0
+    description: "最小阻塞时间阈值（毫秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 30
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS slice_name,
+    s.category,
+    t.name AS thread_name,
+    p.name AS process_name
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND t.is_main_thread = 1
+    AND s.dur >= ${min_dur_ms} * 1e6
+    AND s.depth = 0
+  ORDER BY s.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: slice_name
+      type: string
+    - name: category
+      type: string
+    - name: thread_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - anr_root_cause
+  - binder_timeout_analysis

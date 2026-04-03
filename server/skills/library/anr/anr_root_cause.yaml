@@ -1,0 +1,88 @@
+# ANR Root Cause Skill
+# ANR 根因分析
+
+id: anr_root_cause
+name: ANR Root Cause Analysis
+description: |
+  分析 ANR 发生时的系统状态，找出可能的根因，
+  包括主线程阻塞、Binder 超时、IO 阻塞等。
+version: "1.0"
+type: sql_query
+scene: anr
+tags:
+  - anr
+  - root_cause
+  - blocking
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "发生 ANR 的进程名"
+  - name: anr_timestamp
+    type: integer
+    required: false
+    description: "ANR 发生时间戳（纳秒）"
+  - name: window_ms
+    type: integer
+    required: false
+    default: 5000
+    description: "分析时间窗口（毫秒）"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS slice_name,
+    s.depth,
+    t.name AS thread_name,
+    t.is_main_thread,
+    p.name AS process_name,
+    CASE
+      WHEN s.name LIKE 'binder%' THEN 'binder_call'
+      WHEN s.name LIKE '%Lock%' OR s.name LIKE '%Monitor%' OR s.name LIKE '%contention%' THEN 'lock_contention'
+      WHEN s.name LIKE '%IO%' OR s.name LIKE '%read%' OR s.name LIKE '%write%' THEN 'io_blocking'
+      WHEN s.name LIKE '%sleep%' OR s.name LIKE '%wait%' THEN 'explicit_wait'
+      WHEN s.name LIKE '%GC%' THEN 'gc'
+      WHEN s.name LIKE '%network%' OR s.name LIKE '%socket%' THEN 'network'
+      ELSE 'other'
+    END AS blocking_category
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND t.is_main_thread = 1
+    ${anr_timestamp ? "AND s.ts <= " + anr_timestamp + " AND s.ts >= " + anr_timestamp + " - " + window_ms + " * 1000000" : ""}
+    AND s.dur >= 100000000
+  ORDER BY s.dur DESC
+  LIMIT 50
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: slice_name
+      type: string
+    - name: depth
+      type: integer
+    - name: thread_name
+      type: string
+    - name: is_main_thread
+      type: boolean
+    - name: process_name
+      type: string
+    - name: blocking_category
+      type: string
+  display_level: detail
+
+related_skills:
+  - main_thread_blocking
+  - binder_timeout_analysis

@@ -55,16 +55,27 @@ export const PingMessageSchema = z.object({
   timestamp: z.number(),
 });
 
+export const InvokeSkillSchema = z.object({
+  type: z.literal('invoke_skill'),
+  agentId: z.string().optional(), // 可选，兼容旧客户端，用于关联 skill 调用到特定 agent/会话
+  skillId: z.string(),
+  params: z.record(z.unknown()).optional(),
+  requestId: z.string().optional(),
+  traceId: z.string().optional(),
+});
+
 // 前端 → 后端 消息联合类型
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   ChatRequestSchema,
   PingMessageSchema,
+  InvokeSkillSchema,
 ]);
 
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ToolDefinitionDTO = z.infer<typeof ToolDefinitionDTOSchema>;
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 export type PingMessage = z.infer<typeof PingMessageSchema>;
+export type InvokeSkillRequest = z.infer<typeof InvokeSkillSchema>;
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
 // ============= 后端 → 前端 消息 =============
@@ -94,6 +105,7 @@ export const ToolResultResponseSchema = BaseResponseSchema.extend({
   type: z.literal('tool_result'),
   data: z.object({
     toolCallId: z.string(),
+    requestId: z.string().optional(),  // 前端透传的 requestId
     success: z.boolean(),
     result: z.unknown().optional(),
     error: z.string().optional(),

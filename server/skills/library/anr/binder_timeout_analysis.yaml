@@ -1,0 +1,71 @@
+# Binder Timeout Analysis Skill
+# Binder 超时分析
+
+id: binder_timeout_analysis
+name: Binder Timeout Analysis
+description: |
+  分析 Binder 调用中的超时情况，找出耗时过长的跨进程调用。
+version: "1.0"
+type: sql_query
+scene: anr
+tags:
+  - anr
+  - binder
+  - timeout
+  - ipc
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: min_dur_ms
+    type: float
+    required: false
+    default: 50.0
+    description: "最小 Binder 调用时间阈值（毫秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS binder_call,
+    t.name AS caller_thread,
+    p.name AS caller_process
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND (s.name LIKE 'binder%' OR s.name LIKE 'Binder%' OR s.category = 'binder')
+    AND s.dur >= ${min_dur_ms} * 1e6
+  ORDER BY s.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: binder_call
+      type: string
+    - name: caller_thread
+      type: string
+    - name: caller_process
+      type: string
+  display_level: detail
+
+related_skills:
+  - anr_root_cause
+  - binder_transaction_analysis

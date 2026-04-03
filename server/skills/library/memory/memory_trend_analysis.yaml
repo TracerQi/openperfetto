@@ -1,0 +1,61 @@
+# Memory Trend Analysis Skill
+# 内存趋势分析
+
+id: memory_trend_analysis
+name: Memory Trend Analysis
+description: |
+  分析进程内存使用趋势，包括 RSS、PSS、堆内存等指标的变化。
+version: "1.0"
+type: sql_query
+scene: memory
+tags:
+  - memory
+  - trend
+  - rss
+  - pss
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: sample_interval_ms
+    type: integer
+    required: false
+    default: 1000
+    description: "采样间隔（毫秒）"
+
+sql_template: |
+  SELECT
+    ts,
+    ROUND(ts / 1e9, 2) AS ts_sec,
+    ROUND(value / 1024.0 / 1024.0, 2) AS value_mb,
+    name AS counter_name,
+    p.name AS process_name
+  FROM counter c
+  JOIN process_counter_track pct ON c.track_id = pct.id
+  JOIN process p ON pct.upid = p.upid
+  WHERE p.name LIKE '%${process_name}%'
+    AND (pct.name LIKE '%mem%' OR pct.name LIKE '%rss%' OR pct.name LIKE '%pss%' OR pct.name LIKE '%heap%')
+  ORDER BY ts
+  LIMIT 1000
+
+output_schema:
+  columns:
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: ts_sec
+      type: float
+      unit: s
+    - name: value_mb
+      type: float
+      unit: MB
+    - name: counter_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - allocation_hotspot

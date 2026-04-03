@@ -1,0 +1,74 @@
+# Render Thread Analysis Skill
+# 渲染线程分析
+
+id: render_thread_analysis
+name: Render Thread Analysis
+description: |
+  分析应用的 RenderThread 执行情况，
+  找出渲染线程中耗时较长的操作。
+version: "1.0"
+type: sql_query
+scene: scrolling
+tags:
+  - render
+  - thread
+  - gpu
+
+parameters:
+  - name: process_name
+    type: string
+    required: true
+    description: "目标进程名"
+  - name: min_dur_ms
+    type: float
+    required: false
+    default: 8.0
+    description: "最小持续时间阈值（毫秒）"
+  - name: limit
+    type: integer
+    required: false
+    default: 100
+    description: "返回结果数量限制"
+
+sql_template: |
+  SELECT
+    s.id AS slice_id,
+    s.ts,
+    ROUND(s.dur / 1e6, 2) AS dur_ms,
+    s.name AS slice_name,
+    s.depth,
+    t.name AS thread_name,
+    p.name AS process_name
+  FROM slice s
+  JOIN thread_track tt ON s.track_id = tt.id
+  JOIN thread t ON tt.utid = t.utid
+  JOIN process p ON t.upid = p.upid
+  WHERE t.name = 'RenderThread'
+    AND p.name LIKE '%${process_name}%'
+    AND s.dur >= ${min_dur_ms} * 1e6
+  ORDER BY s.dur DESC
+  LIMIT ${limit}
+
+output_schema:
+  columns:
+    - name: slice_id
+      type: integer
+    - name: ts
+      type: timestamp
+      unit: ns
+    - name: dur_ms
+      type: float
+      unit: ms
+    - name: slice_name
+      type: string
+    - name: depth
+      type: integer
+    - name: thread_name
+      type: string
+    - name: process_name
+      type: string
+  display_level: detail
+
+related_skills:
+  - scroll_jank_detection
+  - frame_timeline_analysis

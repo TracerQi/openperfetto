@@ -17,6 +17,9 @@ import {Trace} from '../../../public/trace';
 import {Store} from '../../../base/store';
 import {TopBar} from './top_bar';
 import {AIChat} from './ai_chat';
+import {SearchPin} from './search_pin';
+import {MarkersJump} from './markers_jump';
+import {Settings} from './settings';
 import {OpenPerfettoState} from '../types/plugin_state';
 import {AgentLoop} from '../agent/agent_loop';
 import {t} from '../i18n';
@@ -60,6 +63,9 @@ export class OpenPerfettoPage
     aiChat: false,
   };
 
+  /** 设置面板是否打开 */
+  private settingsOpen: boolean = false;
+
   view({attrs}: m.CVnode<OpenPerfettoPageAttrs>): m.Children {
     const {trace, store, agentLoop} = attrs;
     const state = store.state;
@@ -81,31 +87,35 @@ export class OpenPerfettoPage
 
         // 可滚动内容区域
         m('.openperfetto-page__content', [
-          // 搜索与 Pin 模块（占位 - Phase 5 实现）
+          // 搜索与 Pin 模块
           this.renderModule(
             'searchPin',
             t(state.locale, 'searchPin.title'),
             'search',
             state.locale,
-            m(
-              '.openperfetto-placeholder',
-              t(state.locale, 'placeholder.searchPin'),
-            ),
+            m(SearchPin, {
+              trace,
+              store,
+              collapsed: this.moduleCollapsed.searchPin,
+              onToggleCollapse: () => this.toggleModule('searchPin'),
+            }),
           ),
 
-          // 标记与跳转模块（占位 - Phase 5 实现）
+          // 标记与跳转模块
           this.renderModule(
             'markers',
             t(state.locale, 'markers.title'),
             'bookmark',
             state.locale,
-            m(
-              '.openperfetto-placeholder',
-              t(state.locale, 'placeholder.markers'),
-            ),
+            m(MarkersJump, {
+              trace,
+              store,
+              collapsed: this.moduleCollapsed.markers,
+              onToggleCollapse: () => this.toggleModule('markers'),
+            }),
           ),
 
-          // AI 对话模块（真实组件）
+          // AI 对话模块
           this.renderModule(
             'aiChat',
             t(state.locale, 'aiChat.title'),
@@ -128,11 +138,21 @@ export class OpenPerfettoPage
             icon: 'settings',
             label: t(state.locale, 'settings.title'),
             onclick: () => {
-              // TODO: Phase 5 实现设置面板
-              console.log('Open settings');
+              this.settingsOpen = true;
+              m.redraw();
             },
           }),
         ]),
+
+        // 设置面板（模态框）
+        m(Settings, {
+          store,
+          isOpen: this.settingsOpen,
+          onClose: () => {
+            this.settingsOpen = false;
+            m.redraw();
+          },
+        }),
       ],
     );
   }

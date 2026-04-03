@@ -29,11 +29,14 @@ export const zh: Record<string, string> = {
   'searchPin.title': '搜索与置顶',
   'searchPin.placeholder': '搜索进程/线程名称...',
   'searchPin.noResults': '无结果',
+  'searchPin.searching': '搜索中...',
   'searchPin.pinAll': '全部置顶',
   'searchPin.unpinAll': '全部取消置顶',
   'searchPin.presets': '预设场景',
   'searchPin.savePreset': '保存为预设',
   'searchPin.deletePreset': '删除预设',
+  'searchPin.history': '搜索历史',
+  'searchPin.applyPreset': '应用预设',
 
   // Markers Module
   'markers.title': '标记与跳转',
@@ -44,6 +47,9 @@ export const zh: Record<string, string> = {
   'markers.severity.info': '信息',
   'markers.severity.warning': '警告',
   'markers.severity.error': '错误',
+  'markers.syncFromSession': '同步AI标记',
+  'markers.clearAll': '清空所有',
+  'markers.editNote': '编辑备注',
 
   // AI Chat Module
   'aiChat.title': 'AI 对话',
@@ -63,6 +69,16 @@ export const zh: Record<string, string> = {
   'settings.connection': '连接设置',
   'settings.serverUrl': '服务器地址',
   'settings.reconnect': '重新连接',
+  'settings.general': '常规',
+  'settings.presets': '预设场景',
+  'settings.about': '关于',
+  'settings.newPreset': '新建场景',
+  'settings.editPreset': '编辑场景',
+  'settings.presetName': '场景名称',
+  'settings.threadRules': '线程规则',
+  'settings.addRule': '添加规则',
+  'settings.processPattern': '进程名模式',
+  'settings.threadPattern': '线程名模式',
 
   // Common
   'common.loading': '加载中...',
