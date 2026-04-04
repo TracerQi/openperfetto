@@ -42,7 +42,7 @@ export class WebSocketClient {
   private static instance: WebSocketClient | null = null;
 
   private ws: WebSocket | null = null;
-  private url: string = 'ws://localhost:8765/ws';
+  private url: string = 'ws://localhost:3001/ws';
   private connectionState: ConnectionState = {status: 'disconnected'};
 
   // 重连相关

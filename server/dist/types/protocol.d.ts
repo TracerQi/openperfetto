@@ -282,6 +282,28 @@ export declare const PingMessageSchema: z.ZodObject<{
     type: "ping";
     timestamp: number;
 }>;
+export declare const InvokeSkillSchema: z.ZodObject<{
+    type: z.ZodLiteral<"invoke_skill">;
+    agentId: z.ZodOptional<z.ZodString>;
+    skillId: z.ZodString;
+    params: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    requestId: z.ZodOptional<z.ZodString>;
+    traceId: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    type: "invoke_skill";
+    skillId: string;
+    params?: Record<string, unknown> | undefined;
+    traceId?: string | undefined;
+    agentId?: string | undefined;
+    requestId?: string | undefined;
+}, {
+    type: "invoke_skill";
+    skillId: string;
+    params?: Record<string, unknown> | undefined;
+    traceId?: string | undefined;
+    agentId?: string | undefined;
+    requestId?: string | undefined;
+}>;
 export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"chat">;
     agentId: z.ZodString;
@@ -480,11 +502,33 @@ export declare const ClientMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
 }, {
     type: "ping";
     timestamp: number;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"invoke_skill">;
+    agentId: z.ZodOptional<z.ZodString>;
+    skillId: z.ZodString;
+    params: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    requestId: z.ZodOptional<z.ZodString>;
+    traceId: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    type: "invoke_skill";
+    skillId: string;
+    params?: Record<string, unknown> | undefined;
+    traceId?: string | undefined;
+    agentId?: string | undefined;
+    requestId?: string | undefined;
+}, {
+    type: "invoke_skill";
+    skillId: string;
+    params?: Record<string, unknown> | undefined;
+    traceId?: string | undefined;
+    agentId?: string | undefined;
+    requestId?: string | undefined;
 }>]>;
 export type ChatMessageDTO = z.infer<typeof ChatMessageDTOSchema>;
 export type ToolDefinitionDTO = z.infer<typeof ToolDefinitionDTOSchema>;
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 export type PingMessage = z.infer<typeof PingMessageSchema>;
+export type InvokeSkillRequest = z.infer<typeof InvokeSkillSchema>;
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export declare const TextDeltaResponseSchema: z.ZodObject<{
     traceId: z.ZodOptional<z.ZodString>;
@@ -550,6 +594,7 @@ export declare const ToolResultResponseSchema: z.ZodObject<{
     type: z.ZodLiteral<"tool_result">;
     data: z.ZodObject<{
         toolCallId: z.ZodString;
+        requestId: z.ZodOptional<z.ZodString>;
         success: z.ZodBoolean;
         result: z.ZodOptional<z.ZodUnknown>;
         error: z.ZodOptional<z.ZodString>;
@@ -557,11 +602,13 @@ export declare const ToolResultResponseSchema: z.ZodObject<{
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     }, {
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     }>;
 }, "strip", z.ZodTypeAny, {
@@ -570,6 +617,7 @@ export declare const ToolResultResponseSchema: z.ZodObject<{
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     };
     traceId?: string | undefined;
@@ -579,6 +627,7 @@ export declare const ToolResultResponseSchema: z.ZodObject<{
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     };
     traceId?: string | undefined;
@@ -743,6 +792,7 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
     type: z.ZodLiteral<"tool_result">;
     data: z.ZodObject<{
         toolCallId: z.ZodString;
+        requestId: z.ZodOptional<z.ZodString>;
         success: z.ZodBoolean;
         result: z.ZodOptional<z.ZodUnknown>;
         error: z.ZodOptional<z.ZodString>;
@@ -750,11 +800,13 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     }, {
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     }>;
 }, "strip", z.ZodTypeAny, {
@@ -763,6 +815,7 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     };
     traceId?: string | undefined;
@@ -772,6 +825,7 @@ export declare const ServerMessageSchema: z.ZodDiscriminatedUnion<"type", [z.Zod
         toolCallId: string;
         success: boolean;
         error?: string | undefined;
+        requestId?: string | undefined;
         result?: unknown;
     };
     traceId?: string | undefined;

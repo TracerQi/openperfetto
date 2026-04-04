@@ -137,6 +137,8 @@ export declare class LLMProxy {
     private tokenMeter;
     private readonly config;
     private readonly retryConfig;
+    private static readonly STREAM_TIMEOUT_MS;
+    private static readonly STREAM_CHECK_INTERVAL_MS;
     constructor(config?: LLMConfig);
     private initializeProviders;
     private initializeProtection;
@@ -157,7 +159,7 @@ export declare class LLMProxy {
      */
     private estimateInputTokens;
     /**
-     * 核心聊天方法（流式）
+     * 核心聊天方法（流式），包含流超时保护
      */
     chat(request: LLMRequest): AsyncGenerator<LLMStreamChunk>;
     /**

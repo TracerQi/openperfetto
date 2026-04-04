@@ -55,7 +55,11 @@ def get_module_name(rel_path: str) -> str:
     Module name (e.g., "slices.stack")
   """
   # Remove .sql extension
-  path_without_ext = rel_path.removesuffix('.sql')
+  # Use slicing instead of removesuffix() for Python 3.8 compatibility
+  if rel_path.endswith('.sql'):
+    path_without_ext = rel_path[:-4]
+  else:
+    path_without_ext = rel_path
   # Convert path separators to dots for module name
   module_name = path_without_ext.replace(os.sep, '.')
   return module_name

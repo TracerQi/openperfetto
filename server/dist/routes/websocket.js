@@ -487,6 +487,86 @@ function handleChatEchoMode(info, message) {
     logger.withTraceId(traceId).info('Chat response sent (echo mode)', { agentId });
 }
 /**
+ * 处理 invoke_skill 消息
+ */
+async function handleInvokeSkill(info, message) {
+    const { agentId, skillId, params: parameters = {}, requestId, traceId: msgTraceId } = message;
+    const traceId = msgTraceId || info.traceId;
+    const loggerWithTrace = logger.withTraceId(traceId);
+    loggerWithTrace.info('Invoke skill request received', { skillId, agentId });
+    // 检查依赖是否已配置
+    if (!dependencies?.skillProcessor || !dependencies?.skillRegistry) {
+        loggerWithTrace.warn('Skill dependencies not configured');
+        sendMessage(info, {
+            type: 'error',
+            traceId,
+            data: {
+                code: 'SERVICE_UNAVAILABLE',
+                message: 'Skill service not available',
+            },
+        });
+        return;
+    }
+    const { skillProcessor } = dependencies;
+    try {
+        // 执行 Skill
+        const executionRequest = {
+            skillId,
+            parameters,
+            traceId,
+        };
+        const result = await skillProcessor.execute(executionRequest);
+        if (!result.success) {
+            sendMessage(info, {
+                type: 'error',
+                traceId,
+                data: {
+                    code: 'SKILL_EXECUTION_ERROR',
+                    message: result.error || 'Skill execution failed',
+                    details: result.validationErrors,
+                },
+            });
+            return;
+        }
+        // 发送 tool_result 响应，透传 requestId
+        const toolCallId = requestId || `skill_${skillId}_${Date.now()}`;
+        sendMessage(info, {
+            type: 'tool_result',
+            traceId,
+            data: {
+                toolCallId,
+                requestId,
+                success: true,
+                result: {
+                    skillId: result.skillId,
+                    skillName: result.skillName,
+                    skillType: result.skillType,
+                    query: result.query,
+                    steps: result.steps,
+                    diagnosticRules: result.diagnosticRules,
+                    metadata: result.metadata,
+                },
+            },
+        });
+        loggerWithTrace.info('Skill executed successfully', {
+            skillId,
+            hasQuery: !!result.query,
+            stepsCount: result.steps?.length,
+        });
+    }
+    catch (err) {
+        loggerWithTrace.error('Skill execution failed', err, { skillId });
+        sendMessage(info, {
+            type: 'error',
+            traceId,
+            data: {
+                code: 'INTERNAL_ERROR',
+                message: err instanceof Error ? err.message : 'Unknown error',
+            },
+        });
+    }
+}
+/**
  * 处理客户端消息
  */
 async function handleMessage(info, rawData) {
@@ -521,6 +601,8 @@ async function handleMessage(info, rawData) {
         });
         return;
     }
+    // 成功解析有效消息后更新 pong 时间（C5: 心跳改善）
+    connectionPool.updatePong(info.id);
     // 分发消息
     switch (message.type) {
         case 'ping':
@@ -528,6 +610,9 @@ async function handleMessage(info, rawData) {
             break;
         case 'chat':
             await handleChat(info, message);
+            break;
+        case 'invoke_skill':
+            await handleInvokeSkill(info, message);
             break;
         default:
             loggerWithTrace.warn('Unknown message type', { type: message.type });

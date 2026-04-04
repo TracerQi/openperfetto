@@ -7,10 +7,14 @@ import { WebSocket } from 'ws';
 import { LLMProxy } from '../services/llm_proxy.js';
 import { SessionManager } from '../services/session_manager.js';
 import { SkillMarkerParser } from '../services/skill_marker_parser.js';
+import { SkillRegistry } from '../services/skill_registry.js';
+import { SkillProcessor } from '../services/skill_processor.js';
 interface WebSocketDependencies {
     llmProxy: LLMProxy;
     sessionManager: SessionManager;
     skillMarkerParser: SkillMarkerParser;
+    skillRegistry?: SkillRegistry;
+    skillProcessor?: SkillProcessor;
 }
 /**
  * 设置 WebSocket 路由依赖
