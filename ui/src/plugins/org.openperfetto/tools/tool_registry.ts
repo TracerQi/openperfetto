@@ -142,7 +142,7 @@ export class ToolRegistry {
       };
     }
 
-    const startTime = performance.now();
+    void performance.now(); // startTime reserved for logging
 
     try {
       // 验证参数

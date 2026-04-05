@@ -145,7 +145,7 @@ function getSuccessfulToolCallCount(messages: ChatMessage[]): number {
  * 辅助函数：检查是否有 SQL 查询工具调用
  * @internal 保留用于将来的规则扩展
  */
-function hasSqlQuery(messages: ChatMessage[]): boolean {
+export function hasSqlQuery(messages: ChatMessage[]): boolean {
   const toolCalls = getToolCalls(messages);
   return toolCalls.some(
     (tc) => tc.name === 'execute_sql' || tc.name === 'lookup_sql_schema',
@@ -166,7 +166,7 @@ function hasFailedSqlQuery(messages: ChatMessage[]): boolean {
  * 辅助函数：从消息中提取数值
  * @internal 保留用于将来的规则扩展
  */
-function extractNumbers(text: string): number[] {
+export function extractNumbers(text: string): number[] {
   const matches = text.match(/[\d.]+/g) || [];
   return matches.map((m) => parseFloat(m)).filter((n) => !isNaN(n));
 }

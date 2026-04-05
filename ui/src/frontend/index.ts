@@ -166,6 +166,9 @@ function setupContentSecurityPolicy() {
     'connect-src': [
       `'self'`,
       'ws://127.0.0.1:8037', // For the adb websocket server.
+      'ws://localhost:3001',   // For OpenPerfetto backend WebSocket connection.
+      'ws://127.0.0.1:3001',  // For OpenPerfetto backend WebSocket (IP format).
+      'http://localhost:3001', // For OpenPerfetto backend HTTP API.
       'https:', // Allow any HTTPS; service worker firewall adds granular filtering.
       'blob:',
       'data:',

@@ -65,11 +65,10 @@ The skill will be executed on the backend and results returned.`,
     concurrency: 'serial',
   };
 
-  private trace: Trace;
   private artifactStore: ArtifactStore;
 
   constructor(trace: Trace, artifactStore: ArtifactStore) {
-    this.trace = trace;
+    void trace; // Reserved for future use
     this.artifactStore = artifactStore;
   }
 
