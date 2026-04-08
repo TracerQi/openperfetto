@@ -703,6 +703,7 @@ $spacing-lg: 16px;
   border-radius: $border-radius;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 10;
+  animation: openperfetto-fade-in 0.15s ease;
 
   .openperfetto-page--dark & {
     background-color: var(--pf-color-surface-dark, #2d2d2d);
@@ -794,19 +795,39 @@ $spacing-lg: 16px;
 }
 
 .openperfetto-search-pin__result-process {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.openperfetto-search-pin__result-main {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+}
+
+.openperfetto-search-pin__result-separator {
+  color: var(--pf-color-text-secondary, #999);
+  margin: 0 2px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
 .openperfetto-search-pin__result-thread {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--pf-color-text-secondary, #666);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
 }
 
 .openperfetto-search-pin__result-ids {
@@ -828,6 +849,114 @@ $spacing-lg: 16px;
   font-style: italic;
 }
 
+// 搜索历史文本缩略
+.openperfetto-search-pin__history-text {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+// 临时通知消息
+.openperfetto-search-pin__notification {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-sm $spacing-md;
+  background-color: #fff3e0;
+  border: 1px solid #ffe0b2;
+  border-radius: $border-radius;
+  font-size: 12px;
+  color: #e65100;
+  animation: openperfetto-fade-in 0.2s ease;
+
+  .openperfetto-page--dark & {
+    background-color: #3e2723;
+    border-color: #4e342e;
+    color: #ffb74d;
+  }
+}
+
+@keyframes openperfetto-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 搜索中 loading 横排布局
+.openperfetto-search-pin__loading {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm;
+  font-size: 12px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+// 搜索高亮（trace 主区域轨道黄色底色）
+.openperfetto-search-highlight {
+  .pf-track__title {
+    background-color: rgba(255, 235, 59, 0.45);
+    border-radius: 2px;
+    padding: 0 2px;
+  }
+
+  .openperfetto-page--dark & {
+    .pf-track__title {
+      background-color: rgba(255, 235, 59, 0.3);
+    }
+  }
+}
+
+// 取消按钮样式
+.openperfetto-search-pin__cancel-btn {
+  flex-shrink: 0;
+}
+
+// 匹配计数导航
+.openperfetto-search-pin__match-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-xs $spacing-sm;
+  font-size: 12px;
+  color: var(--pf-color-text-secondary, #666);
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  border-radius: $border-radius;
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #383838);
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+}
+
+// AI 置顶标识 badge
+.openperfetto-ai-pin-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+  font-size: 10px;
+  margin-right: $spacing-xs;
+  flex-shrink: 0;
+  cursor: help;
+
+  i {
+    font-size: 12px;
+  }
+}
+
 .openperfetto-search-pin__presets {
   border: 1px solid var(--pf-color-divider, #ddd);
   border-radius: $border-radius;
@@ -844,30 +973,28 @@ $spacing-lg: 16px;
   gap: $spacing-xs;
   padding: $spacing-xs $spacing-sm;
   background-color: var(--pf-color-surface-variant, #f5f5f5);
-  cursor: pointer;
   font-size: 12px;
   font-weight: 500;
 
-  &:hover {
-    background-color: var(--pf-color-surface-hover, #eee);
-  }
-
   .openperfetto-page--dark & {
     background-color: var(--pf-color-surface-variant-dark, #383838);
-
-    &:hover {
-      background-color: var(--pf-color-surface-hover-dark, #444);
-    }
   }
 }
 
-.openperfetto-search-pin__presets-toggle {
-  margin-left: auto;
+.openperfetto-search-pin__presets-spacer {
+  flex: 1;
 }
 
-.openperfetto-search-pin__presets-list {
-  max-height: 150px;
-  overflow-y: auto;
+.openperfetto-search-pin__presets-add-btn {
+  flex-shrink: 0;
+}
+
+// chip 卡片容器（横向排列、换行）
+.openperfetto-search-pin__presets-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: $spacing-sm;
 }
 
 .openperfetto-search-pin__presets-empty {
@@ -876,41 +1003,43 @@ $spacing-lg: 16px;
   color: var(--pf-color-text-secondary, #666);
   font-size: 11px;
   font-style: italic;
+  width: 100%;
 }
 
-.openperfetto-search-pin__preset-item {
-  display: flex;
+// 预设场景 chip 卡片
+.openperfetto-search-pin__preset-chip {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  padding: $spacing-xs $spacing-sm;
-  border-bottom: 1px solid var(--pf-color-divider, #eee);
+  padding: 4px 10px;
+  border-radius: 14px;
+  background-color: var(--pf-color-surface-variant, #e8e8e8);
+  color: var(--pf-color-text, #333);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
 
-  &:last-child {
-    border-bottom: none;
+  &:hover {
+    background-color: var(--pf-color-primary, #1a73e8);
+    color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    box-shadow: 0 0 0 transparent;
   }
 
   .openperfetto-page--dark & {
-    border-color: var(--pf-color-divider-dark, #3a3a3a);
+    background-color: var(--pf-color-surface-variant-dark, #444);
+    color: var(--pf-color-text-dark, #e0e0e0);
+
+    &:hover {
+      background-color: var(--pf-color-primary, #1a73e8);
+      color: white;
+    }
   }
-}
-
-.openperfetto-search-pin__preset-info {
-  flex: 1;
-}
-
-.openperfetto-search-pin__preset-name {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.openperfetto-search-pin__preset-count {
-  font-size: 10px;
-  color: var(--pf-color-text-secondary, #666);
-}
-
-.openperfetto-search-pin__preset-actions {
-  display: flex;
-  gap: $spacing-xs;
 }
 
 // ============================================================================
@@ -1354,9 +1483,33 @@ $spacing-lg: 16px;
   display: flex;
   gap: $spacing-xs;
   align-items: center;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
 
   input {
     flex: 1;
+  }
+
+  // 拖拽中的项半透明
+  &--dragging {
+    opacity: 0.4;
+  }
+
+  // 拖拽悬停目标位置指示
+  &--dragover {
+    background-color: rgba(26, 115, 232, 0.08);
+    border-top: 2px solid var(--pf-color-primary, #1a73e8);
+  }
+}
+
+// 拖拽手柄图标
+.openperfetto-settings__drag-handle {
+  cursor: grab;
+  color: var(--pf-color-text-secondary, #999);
+  font-size: 18px;
+  flex-shrink: 0;
+
+  &:active {
+    cursor: grabbing;
   }
 }
 

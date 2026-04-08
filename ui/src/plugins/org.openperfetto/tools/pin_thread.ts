@@ -24,6 +24,8 @@
 import {Trace} from '../../../public/trace';
 import {ITool, ToolDefinition, ToolExecutionResult} from './tool_registry';
 import {NUM, STR} from '../../../trace_processor/query_result';
+import {Store} from '../../../base/store';
+import {OpenPerfettoState} from '../types/plugin_state';
 
 export class PinThreadTool implements ITool {
   readonly definition: ToolDefinition = {
@@ -54,9 +56,11 @@ AI-pinned tracks are visually distinguished.`,
   };
 
   private trace: Trace;
+  private store: Store<OpenPerfettoState> | null;
 
-  constructor(trace: Trace) {
+  constructor(trace: Trace, store?: Store<OpenPerfettoState>) {
     this.trace = trace;
+    this.store = store ?? null;
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolExecutionResult> {
@@ -146,6 +150,31 @@ AI-pinned tracks are visually distinguished.`,
       }
 
       if (pinned) {
+        // 记录 AI pin 状态到 store
+        if (this.store) {
+          const pinnedUri = trackUri;
+          this.store.edit((draft) => {
+            // 记录到 aiPinnedTrackUris
+            if (!draft.aiPinnedTrackUris.includes(pinnedUri)) {
+              draft.aiPinnedTrackUris.push(pinnedUri);
+            }
+            // 同时记录到当前 session 的 pinnedTracks
+            if (draft.currentSession) {
+              const exists = draft.currentSession.pinnedTracks.some(
+                (p) => p.trackId === pinnedUri,
+              );
+              if (!exists) {
+                draft.currentSession.pinnedTracks.push({
+                  trackId: pinnedUri,
+                  processName: processName ?? '',
+                  threadName: threadName ?? '',
+                  order: draft.currentSession.pinnedTracks.length,
+                });
+              }
+            }
+          });
+        }
+
         return {
           success: true,
           data: {
@@ -154,6 +183,7 @@ AI-pinned tracks are visually distinguished.`,
             threadName,
             processName,
             pinned: true,
+            aiPinned: true,
             message: `Thread ${utid} pinned to top`,
           },
           executionTimeMs: performance.now() - startTime,

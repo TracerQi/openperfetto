@@ -52,10 +52,38 @@ export interface OpenPerfettoState {
 
   /** AI标记列表 */
   markers: AIMarker[];
+
+  /** AI 置顶轨道 URI 集合（用于区分 AI pin 和用户手动 pin） */
+  aiPinnedTrackUris: string[];
 }
 
 /** 当前状态版本 */
-export const CURRENT_STATE_VERSION = 2;
+export const CURRENT_STATE_VERSION = 4;
+
+/**
+ * 默认预置场景
+ */
+const DEFAULT_PRESET_SCENES: PresetPinScene[] = [
+  {
+    id: 'preset_default_jank',
+    name: 'Jank analysis',
+    threads: [
+      {processPattern: 'system_server', threadPattern: 'iq', order: 0},
+      {
+        processPattern: 'surfaceflinger',
+        threadPattern: 'vsync-app',
+        order: 1,
+      },
+      {
+        processPattern: 'surfaceflinger',
+        threadPattern: 'vsync-sf',
+        order: 2,
+      },
+    ],
+    createdAt: 0,
+    updatedAt: 0,
+  },
+];
 
 /**
  * 创建默认状态
@@ -69,9 +97,10 @@ export function createDefaultState(): OpenPerfettoState {
     currentSession: null,
     theme: 'light',
     locale: 'zh',
-    presetPinScenes: [],
+    presetPinScenes: [...DEFAULT_PRESET_SCENES],
     searchHistory: [],
     markers: [],
+    aiPinnedTrackUris: [],
   };
 }
 
@@ -113,6 +142,42 @@ export const migrateState: Migrate<OpenPerfettoState> = (
     state.version = 2;
     // 清理废弃字段
     delete (state as Record<string, unknown>).sidebarExpanded;
+  }
+
+  // 版本 2 -> 3: 添加 aiPinnedTrackUris
+  if (version < 3) {
+    state.aiPinnedTrackUris = state.aiPinnedTrackUris ?? [];
+    state.version = 3;
+  }
+
+  // 版本 3 -> 4: 添加默认 Jank analysis 预设场景
+  if (version < 4) {
+    const presets = (state as Partial<OpenPerfettoState>).presetPinScenes ?? [];
+    // 只在没有预设场景时才添加默认场景
+    if (presets.length === 0) {
+      (state as Partial<OpenPerfettoState>).presetPinScenes = [
+        {
+          id: 'preset_default_jank',
+          name: 'Jank analysis',
+          threads: [
+            {processPattern: 'system_server', threadPattern: 'iq', order: 0},
+            {
+              processPattern: 'surfaceflinger',
+              threadPattern: 'vsync-app',
+              order: 1,
+            },
+            {
+              processPattern: 'surfaceflinger',
+              threadPattern: 'vsync-sf',
+              order: 2,
+            },
+          ],
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ];
+    }
+    state.version = 4;
   }
 
   // 确保所有必需字段存在

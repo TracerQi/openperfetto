@@ -51,6 +51,7 @@ export function createDefaultMockState(): OpenPerfettoState {
     presetPinScenes: [],
     searchHistory: [],
     markers: [],
+    aiPinnedTrackUris: [],
   };
 }
 

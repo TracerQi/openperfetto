@@ -49,6 +49,8 @@ export {PinThreadTool} from './pin_thread';
 import {Trace} from '../../../public/trace';
 import {ArtifactStore} from '../agent/artifact_store';
 import {ITool} from './tool_registry';
+import {Store} from '../../../base/store';
+import {OpenPerfettoState} from '../types/plugin_state';
 
 import {ExecuteSqlTool} from './execute_sql';
 import {InvokeSkillTool} from './invoke_skill';
@@ -71,6 +73,7 @@ import {PinThreadTool} from './pin_thread';
 export function createAllTools(
   trace: Trace,
   artifactStore: ArtifactStore,
+  store?: Store<OpenPerfettoState>,
 ): ITool[] {
   return [
     // Query Tools
@@ -89,7 +92,7 @@ export function createAllTools(
     // Navigation Tools
     new NavigateTimelineTool(trace),
     new MarkPositionTool(trace),
-    new PinThreadTool(trace),
+    new PinThreadTool(trace, store),
   ];
 }
 

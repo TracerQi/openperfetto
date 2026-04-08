@@ -27,16 +27,19 @@ export const en: Record<string, string> = {
 
   // SearchPin Module
   'searchPin.title': 'Search & Pin',
-  'searchPin.placeholder': 'Search process/thread name...',
-  'searchPin.noResults': 'No results',
+  'searchPin.placeholder': 'Search process/thread, e.g. surf+vsync',
+  'searchPin.noResults': 'No matching results',
+  'searchPin.noResultsProcessThread': 'No thread found under specified process',
   'searchPin.searching': 'Searching...',
   'searchPin.pinAll': 'Pin All',
   'searchPin.unpinAll': 'Unpin All',
   'searchPin.presets': 'Preset Scenes',
+  'searchPin.noPresets': 'No preset scenes',
   'searchPin.savePreset': 'Save as Preset',
   'searchPin.deletePreset': 'Delete Preset',
   'searchPin.history': 'Search History',
   'searchPin.applyPreset': 'Apply Preset',
+  'searchPin.aiPinBadge': 'AI Pinned',
 
   // Markers Module
   'markers.title': 'Markers & Jump',

@@ -38,6 +38,8 @@ export interface SettingsAttrs {
   store: Store<OpenPerfettoState>;
   isOpen: boolean;
   onClose: () => void;
+  /** 初始打开的tab */
+  initialTab?: string;
 }
 
 type SettingsTab = 'general' | 'presets' | 'about';
@@ -51,12 +53,20 @@ export class Settings implements m.ClassComponent<SettingsAttrs> {
   private newPresetName: string = '';
   private newPresetThreads: PresetPinThread[] = [];
   private isCreatingPreset: boolean = false;
+  /** 拖拽排序状态 */
+  private dragIndex: number = -1;
+  private dragOverIndex: number = -1;
 
   view({attrs}: m.CVnode<SettingsAttrs>): m.Children {
-    const {store, isOpen, onClose} = attrs;
+    const {store, isOpen, onClose, initialTab} = attrs;
 
     if (!isOpen) {
       return null;
+    }
+
+    // 初始打开时切换到指定tab
+    if (initialTab && initialTab !== this.activeTab) {
+      this.activeTab = initialTab as SettingsTab;
     }
 
     const state = store.state;
@@ -368,40 +378,107 @@ export class Settings implements m.ClassComponent<SettingsAttrs> {
   }
 
   /**
-   * 渲染线程规则行
+   * 渲染线程规则行（支持拖拽排序）
    */
   private renderThreadRuleRow(
     thread: PresetPinThread,
     index: number,
     locale: 'zh' | 'en',
   ): m.Children {
-    return m('.openperfetto-settings__thread-rule', {key: index}, [
-      m('input.openperfetto-settings__form-input', {
-        type: 'text',
-        value: thread.processPattern,
-        placeholder: locale === 'zh' ? '进程名模式' : 'Process pattern',
-        oninput: (e: Event) => {
-          this.newPresetThreads[index].processPattern = (
-            e.target as HTMLInputElement
-          ).value;
+    const isDragging = this.dragIndex === index;
+    const isDragOver = this.dragOverIndex === index;
+
+    return m(
+      '.openperfetto-settings__thread-rule',
+      {
+        key: index,
+        draggable: true,
+        class: [
+          isDragging ? 'openperfetto-settings__thread-rule--dragging' : '',
+          isDragOver ? 'openperfetto-settings__thread-rule--dragover' : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        ondragstart: (e: DragEvent) => {
+          this.dragIndex = index;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+          }
         },
-      }),
-      m('input.openperfetto-settings__form-input', {
-        type: 'text',
-        value: thread.threadPattern,
-        placeholder: locale === 'zh' ? '线程名模式' : 'Thread pattern',
-        oninput: (e: Event) => {
-          this.newPresetThreads[index].threadPattern = (
-            e.target as HTMLInputElement
-          ).value;
+        ondragover: (e: DragEvent) => {
+          e.preventDefault();
+          if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
+          }
+          if (this.dragOverIndex !== index) {
+            this.dragOverIndex = index;
+            m.redraw();
+          }
         },
-      }),
-      m(Button, {
-        icon: 'remove',
-        onclick: () => this.removeThreadRule(index),
-        compact: true,
-      }),
-    ]);
+        ondragleave: () => {
+          if (this.dragOverIndex === index) {
+            this.dragOverIndex = -1;
+            m.redraw();
+          }
+        },
+        ondrop: (e: DragEvent) => {
+          e.preventDefault();
+          if (
+            this.dragIndex >= 0 &&
+            this.dragIndex !== index &&
+            this.dragIndex < this.newPresetThreads.length
+          ) {
+            // 执行排序：将 dragIndex 的元素移动到 index 位置
+            const moved = this.newPresetThreads.splice(this.dragIndex, 1)[0];
+            this.newPresetThreads.splice(index, 0, moved);
+            // 更新 order 字段
+            this.newPresetThreads.forEach((t, i) => {
+              t.order = i;
+            });
+          }
+          this.dragIndex = -1;
+          this.dragOverIndex = -1;
+          m.redraw();
+        },
+        ondragend: () => {
+          this.dragIndex = -1;
+          this.dragOverIndex = -1;
+          m.redraw();
+        },
+      },
+      [
+        // 拖拽手柄
+        m(Icon, {
+          icon: 'drag_indicator',
+          className: 'openperfetto-settings__drag-handle',
+        }),
+        m('input.openperfetto-settings__form-input', {
+          type: 'text',
+          value: thread.processPattern,
+          placeholder: locale === 'zh' ? '进程名模式' : 'Process pattern',
+          oninput: (e: Event) => {
+            this.newPresetThreads[index].processPattern = (
+              e.target as HTMLInputElement
+            ).value;
+          },
+        }),
+        m('input.openperfetto-settings__form-input', {
+          type: 'text',
+          value: thread.threadPattern,
+          placeholder: locale === 'zh' ? '线程名模式' : 'Thread pattern',
+          oninput: (e: Event) => {
+            this.newPresetThreads[index].threadPattern = (
+              e.target as HTMLInputElement
+            ).value;
+          },
+        }),
+        m(Button, {
+          icon: 'remove',
+          onclick: () => this.removeThreadRule(index),
+          compact: true,
+        }),
+      ],
+    );
   }
 
   /**

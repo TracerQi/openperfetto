@@ -4,13 +4,78 @@
 
 ---
 
+## 0. 修改代码后编译验证（最常用）
+
+### 第一步：先检查，再决定操作
+
+修改完代码后，**不要直接杀进程重启**，先判断当前状态：
+
+```powershell
+# 快速检查：dev server 是否正常运行在 10000 端口？
+wsl bash -c "curl -s -o /dev/null -w '%{http_code}' http://localhost:10000"
+```
+
+| 返回值 | 含义 | 应该做什么 |
+|--------|------|------------|
+| `200` | dev server 正常运行 | **不需要重启**，watch 模式会自动检测文件变更并增量编译 |
+| 无响应/超时 | dev server 未运行或端口异常 | 执行下方的「冷启动」流程 |
+
+> **关键理解**：`run_build.sh` 启动后进入 watch 模式（`--watch`），TSC 和 Rollup 会持续监听文件变更。修改 `.ts`/`.scss` 文件后保存，watch 自动增量编译，通常几秒到几十秒即完成。**只有 dev server 不在运行时才需要重新启动。**
+
+### 第二步 A：watch 模式已运行（最常见，无需重启）
+
+dev server 返回 `200` 时，watch 模式正常运行中：
+
+1. 修改文件后保存
+2. 等待终端输出 TSC/Rollup 增量编译完成
+3. 浏览器自动 live reload
+
+> **WSL 跨文件系统 watch 已知问题**：WSL 挂载 NTFS 时，`fs.watch()` 可能不触发文件变更事件。如果修改了文件但 watch 未响应，手动 touch：
+> ```bash
+> wsl touch /mnt/d/1aLq/ProFile/perfetto/ui/src/frontend/index.ts
+> ```
+
+### 第二步 B：冷启动（dev server 未运行）
+
+dev server 无响应时，在 **PowerShell** 中执行以下命令完成「杀残留进程 → 清锁 → 启动编译」全流程：
+
+```powershell
+# 1. 清理残留的构建进程（使用 kill_build.sh 一键清理 WSL 侧）
+foreach ($port in @(10000, 10001)) {
+  $proc = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
+  if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+}
+wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+
+# 2. 等待端口完全释放（约 2-3 秒）
+Start-Sleep -Seconds 3
+
+# 3. 启动增量编译 + dev server（WSL 内执行）
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+```
+
+编译完成后 dev server 自动监听 **http://localhost:10000**（输出 `HTTP server is listening on http://localhost:10000`），后续文件保存将触发自动增量重编 + 浏览器 live reload。
+
+> **耗时参考**：WASM 已缓存时，TSC 编译约 1-2 分钟，Rollup 打包约 8-10 分钟（WSL + NTFS）。后续 watch 模式下的增量编译仅需数秒。
+
+> **纯前端修改提速**：如果仅修改了 TypeScript/SCSS，未涉及 C++/WASM，冷启动时可用 `start_frontend.sh`（含 `--no-wasm --watch` 参数），跳过 WASM 编译，首次构建约 2-3 分钟（vs `run_build.sh` 的 8-10 分钟）：
+> ```powershell
+> wsl bash -c "cd /mnt/d/1aLq/ProFile/perfetto; bash start_frontend.sh"
+> ```
+> 启动后同样进入 watch 模式，后续修改自动增量编译，几秒生效。
+
+> **常见陷阱：残留多实例**：如果之前的会话未正常退出，WSL 内可能残留多组 build.js 进程（可通过 `wsl ps aux | grep build.js | grep -v grep` 检查），多实例互相冲突会导致 dev server 启动失败（端口全部被占或全部失败）。此时必须先 `bash kill_build.sh` 清理所有残留进程，再启动新的编译。
+
+---
+
 ## 1. 快速编译流程概览
 
 ```
 修改代码
   │
-  ├─ 前端 TypeScript ──→ watch 模式运行中？──→ 是 → 自动增量编译（TSC + Rollup）→ 验证
-  │                                          └→ 否 → bash run_build.sh → 验证
+  ├─ 前端 TypeScript ──→ dev server 在 10000 正常？──→ 是 → watch 自动增量编译（TSC + Rollup）→ 验证
+  │                                                └→ 否 → 清理残留进程 → bash run_build.sh → 验证
   │
   ├─ 后端 Node.js ─────→ tsx watch 运行中？──→ 是 → 自动重启 → 验证
   │                                          └→ 否 → cd server && npm run dev → 验证
@@ -24,13 +89,27 @@
 
 **核心原则：增量编译优先。** Ninja 基于文件时间戳判断重编目标，终端断开不丢失已编译的 `.o` 文件，恢复后可继续。
 
+**重要**：启动编译前务必确认端口 10000 已释放，否则 dev server 会自动回退到 10001、10002 等备用端口。务必以 **http://localhost:10000** 为准，备用端口不保证功能完整。
+
+> **端口释放验证**：杀端口后执行 `wsl bash -c "curl -s -o /dev/null -w '%{http_code}' http://localhost:10000"`，若返回 `200` 说明端口仍被占用；无响应则端口已释放。注意：WSL 内的 dev server 在 Windows 侧 `netstat` 中可能看不到。
+
 ---
 
 ## 2. 按修改类型分类的编译指南
 
 ### 2.1 修改前端 TypeScript 代码（最常见）
 
-**watch 模式运行中（推荐）**
+**核心原则：启动一次 watch，后续修改秒级生效。不要反复重启！**
+
+```
+首次启动 watch 模式（约 2-10 分钟，仅一次）
+  │
+  └→ 修改 .ts/.scss 文件 → 保存 → watch 自动增量编译（几秒）→ 浏览器 live reload
+     ↑                                                          │
+     └──────────────────── 可重复此循环，无需重启 ─────────────────┘
+```
+
+**watch 模式运行中（推荐，后续修改仅需几秒）**
 
 `build.js --watch` 会同时运行 TSC `--watch` 和 Rollup `--watch`，保存文件后自动触发增量编译：
 
@@ -38,14 +117,23 @@
 2. Rollup 检测到 TSC 输出变更 → 重新打包 bundle → 输出到 `out/ui/ui/dist/`
 3. dev server 通过 Server-Sent Events 通知浏览器 live reload
 
-**watch 模式未运行**
+> **判断 watch 是否在运行**：`wsl bash -c "curl -s -o /dev/null -w '%{http_code}' http://localhost:10000"` 返回 `200` 即为正常运行。
+
+**watch 模式未运行（冷启动）**
+
+仅修改前端代码（TS/SCSS）时，推荐使用 `start_frontend.sh`（跳过 WASM 编译，首次约 2-3 分钟）：
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto
-bash run_build.sh
+wsl bash -c "cd /mnt/d/1aLq/ProFile/perfetto; bash start_frontend.sh"
 ```
 
-Ninja 会增量跳过已编译的 WASM，仅重新执行 TSC + Rollup 打包。
+如果涉及 C++/WASM 修改，使用 `run_build.sh`（含 WASM 编译，首次约 8-10 分钟）：
+
+```bash
+wsl bash -c "cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+```
+
+两个脚本都会启动 watch 模式，**首次构建完成后不要关闭终端**，后续修改会自动增量编译。
 
 **WSL 跨文件系统 watch 已知问题**
 
@@ -145,21 +233,45 @@ bash run_build.sh
 node ui/build.js --no-depscheck --only-wasm-memory64 --no-override-gn-args
 ```
 
-**Windows PowerShell 中通过 WSL 启动（后台模式）**：
+**Windows PowerShell 中通过 WSL 启动**：
 
 ```powershell
-# 先清理端口占用（以10000为例）
-$proc = Get-NetTCPConnection -LocalPort 10000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
-if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+# 第 1 步：清理残留的构建进程（使用 kill_build.sh 一键清理 WSL 侧）
+foreach ($port in @(10000, 10001)) {
+  $proc = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
+  if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+}
+wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
 
-# 启动增量编译 + dev server（在 WSL 后台运行）
+# 第 2 步：等待端口释放
+Start-Sleep -Seconds 3
+
+# 第 3 步：启动增量编译 + dev server（在 WSL 中运行，前台保持输出）
 wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
 ```
 
-**`run_build.sh` 做了什么**：
-1. 清除旧的 `watch.lock` 文件
+> **实战提示**：
+> - 编译输出中出现 `HTTP server is listening on http://localhost:10000` 表示 dev server 启动成功
+> - 如果看到 `Port 10000 is in use, trying 10001...` 说明端口未释放干净，需 Ctrl+C 终止当前编译，重新杀端口后重启
+> - 首次 Rollup 打包在 WSL + NTFS 下约 8-10 分钟，后续 watch 增量仅需几秒
+> - 如果看到 `EADDRINUSE` 错误，说明端口未释放干净，重新执行第 1-2 步
+> - 仅修改前端 TS/SCSS 未改 C++/WASM 时，第 3 步可改用 `bash start_frontend.sh`（含 `--no-wasm --watch`），跳过 WASM 编译，首次构建约 2-3 分钟
+
+**`run_build.sh` / `start_frontend.sh` 做了什么**：
+1. 检测并清理已有构建实例（读 watch.lock 中的 PID，杀旧进程，清理残留子进程）
 2. 设置环境变量（PATH、EMSDK、NODE_OPTIONS）
-3. 执行 `build.js --no-depscheck --only-wasm-memory64 --no-override-gn-args --serve --watch`
+3. 执行 `build.js`（`run_build.sh` 含 WASM，`start_frontend.sh` 跳过 WASM）
+4. 启动 TSC `--watch` + Rollup `--watch` + dev server `--serve`
+
+**相关脚本速查**：
+
+| 脚本 | 用途 | 关键参数 |
+|------|------|----------|
+| `run_build.sh` | 完整增量编译（含 WASM）+ watch + serve | `--only-wasm-memory64 --serve --watch` |
+| `start_frontend.sh` | 纯前端编译（跳过 WASM）+ watch + serve | `--no-wasm --only-wasm-memory64 --no-override-gn-args --serve --watch` |
+| `restart_dev_server.sh` | 与 `run_build.sh` 相同（别名） | 同 `run_build.sh` |
+| `kill_build.sh` | 杀 WSL 内构建进程 + 清锁 | `pkill` + `rm watch.lock` |
 
 ### 3.3 后端构建命令
 
@@ -205,11 +317,13 @@ wsl curl http://localhost:3001/health
 | Node.js OOM | FATAL ERROR: Allocation failed | 确认 `NODE_OPTIONS=--max-old-space-size=8192` |
 | Rollup SCSS 错误 | Could not resolve '.scss' | 使用 `styles.scss` 包装文件，勿在 TS 中直接 import |
 | CSP 阻止 WebSocket | Console 报 CSP violation | 检查 `ui/src/frontend/index.ts` 中 `connect-src` 配置 |
-| 端口被占用 | EADDRINUSE | WSL: `wsl fuser -k <端口>/tcp`；PowerShell: `$proc = Get-NetTCPConnection -LocalPort <端口> -ErrorAction SilentlyContinue \| Select-Object -ExpandProperty OwningProcess \| Sort-Object -Unique; if ($proc) { $proc \| ForEach-Object { Stop-Process -Id $_ -Force } }` |
+| 端口被占用 / dev server 回退 | `Port 10000 is in use, trying 10001...` 或 EADDRINUSE | **双重清理**（Windows 侧 + WSL 侧）：**PowerShell**: `foreach($p in @(10000,10001)){$proc=Get-NetTCPConnection -LocalPort $p -EA 0 \| Select -Exp OwningProcess \| Sort -Unique; if($proc){$proc \| %{Stop-Process -Id $_ -Force}}}` + **WSL**: `wsl bash -c "fuser -k 10000/tcp; fuser -k 10001/tcp; bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh"`，等待 3 秒后重试 |
+| WSL 内残留多组 build.js 进程 | 端口全部空闲但 dev server 启动失败，`wsl ps aux \| grep build.js` 显示多组进程 | `wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh` 一键清理所有残留构建进程 + 锁文件，然后重新启动 |
 | `.ninja_log` 损坏 | premature end of file | Ninja 自动恢复，无需处理 |
 | Python 3.8 不兼容 | AttributeError: removesuffix | 避免使用 3.9+ 新语法（如 `removesuffix`），改用切片 `str[:-4]` |
 | pnpm lockfile 不同步 | frozen-lockfile 失败 | 使用 `--no-depscheck` 跳过（`run_build.sh` 已包含） |
-| build.js 锁冲突 | a build.js instance is already running | `rm /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock`（`run_build.sh` 启动时自动清除） |
+| build.js 锁冲突 | a build.js instance is already running | `wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock"`（`run_build.sh` 启动时自动清除）。或使用 `wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh` 一键清理 |
+| dev server 端口回退后如何恢复 | 浏览器访问 10001 但功能异常 | Ctrl+C 终止编译 → 杀端口（Windows + WSL 双重清理）→ 等待 3 秒 → 重新启动编译 |
 
 ---
 
@@ -221,3 +335,4 @@ wsl curl http://localhost:3001/health
 4. **核心文件修改需验证**：修改 `ui/src/frontend/index.ts`（CSP 配置等）后，必须确认重编译已生效。
 5. **时间戳验证**：检查 `out/ui/ui/tsc/` 下对应 `.js` 文件的时间戳，确认与源文件修改时间一致。
 6. **构建锁机制**：`build.js` 使用 `out/ui/watch.lock` 防止多实例并发构建，`run_build.sh` 启动时会自动清除旧锁。
+7. **Omnibox 不隐藏**：原始 Perfetto 顶部搜索栏（Omnibox）必须保留显示，新侧边栏搜索框仅提供扩展功能，不可替代或隐藏原 Omnibox。CSS 中不应出现 `body.openperfetto-active .pf-omnibox { display: none }` 之类的规则。

@@ -193,7 +193,7 @@ export class AgentLoop {
 
     // 初始化 Tool Registry 并注册所有 Tools
     this.toolRegistry = new ToolRegistry(trace, this.artifactStore);
-    this.toolRegistry.registerAll(createAllTools(trace, this.artifactStore));
+    this.toolRegistry.registerAll(createAllTools(trace, this.artifactStore, store));
 
     // 初始化验证器
     this.verifier = new Verifier();

@@ -27,16 +27,19 @@ export const zh: Record<string, string> = {
 
   // SearchPin Module
   'searchPin.title': '搜索与置顶',
-  'searchPin.placeholder': '搜索进程/线程名称...',
-  'searchPin.noResults': '无结果',
+  'searchPin.placeholder': '搜索进程/线程，如 surf+vsync',
+  'searchPin.noResults': '未找到匹配结果',
+  'searchPin.noResultsProcessThread': '不存在指定进程下的线程',
   'searchPin.searching': '搜索中...',
   'searchPin.pinAll': '全部置顶',
   'searchPin.unpinAll': '全部取消置顶',
   'searchPin.presets': '预设场景',
+  'searchPin.noPresets': '暂无预置场景',
   'searchPin.savePreset': '保存为预设',
   'searchPin.deletePreset': '删除预设',
   'searchPin.history': '搜索历史',
   'searchPin.applyPreset': '应用预设',
+  'searchPin.aiPinBadge': 'AI 置顶',
 
   // Markers Module
   'markers.title': '标记与跳转',

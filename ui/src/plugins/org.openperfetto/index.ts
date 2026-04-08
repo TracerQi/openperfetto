@@ -21,6 +21,7 @@ import {Store} from '../../base/store';
 import {OpenPerfettoPage} from './sidebar/openperfetto_page';
 import {WebSocketClient} from './services/websocket_client';
 import {AgentLoop} from './agent/agent_loop';
+import {focusSearchInput} from './sidebar/search_pin';
 import {
   OpenPerfettoState,
   createDefaultState,
@@ -205,6 +206,7 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
   private wsClient: WebSocketClient | null = null;
   private agentLoop: AgentLoop | null = null;
   private unsubscribeWsState: (() => void) | null = null;
+  private aiPinObserver: MutationObserver | null = null;
 
   constructor(trace: Trace) {
     this.trace = trace;
@@ -219,6 +221,20 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
     const wsClient = WebSocketClient.getInstance();
     wsClient.setUrl('ws://localhost:3001/ws');
     wsClient.connect();
+
+    // Ctrl+F 快捷键拦截：将浏览器默认搜索转向新搜索框
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        // 如果侧边栏关闭则打开
+        if (sidebarState === 'closed') {
+          openSidebar();
+        }
+        // 延迟聚焦，确保 DOM 已更新
+        setTimeout(() => focusSearchInput(), 50);
+      }
+    });
 
     // 初始化侧边栏宽度（黄金比互补）
     sidebarWidth = clampWidth(window.innerWidth * (1 - 0.618));
@@ -364,6 +380,8 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
     // 8. 监听 trace ready 事件
     ctx.onTraceReady.addListener(async () => {
       console.log(`${OpenPerfettoPlugin.id}::traceready`);
+      // 启动 AI Pin badge 注入（延迟确保 DOM 已渲染）
+      this.setupAIPinBadgeObserver();
     });
   }
 
@@ -372,6 +390,11 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
    * 注意：侧边栏 DOM 元素在全应用生命周期内持续存在，不在此删除
    */
   private cleanup(): void {
+    // 清理 AI Pin Badge Observer
+    if (this.aiPinObserver) {
+      this.aiPinObserver.disconnect();
+      this.aiPinObserver = null;
+    }
     // 清理 AgentLoop
     if (this.agentLoop) {
       this.agentLoop.dispose();
@@ -393,5 +416,62 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
 
     this.store = null;
     console.log(`${OpenPerfettoPlugin.id}::cleanup()`);
+  }
+
+  /**
+   * AI Pin Badge DOM 注入
+   * 使用 MutationObserver 监听 workspace 变化，
+   * 当检测到 AI pinned track 的 DOM 出现时，注入圆形 AI 图标
+   */
+  private setupAIPinBadgeObserver(): void {
+    // 断开旧的 observer
+    if (this.aiPinObserver) {
+      this.aiPinObserver.disconnect();
+    }
+
+    const injectBadges = () => {
+      if (!this.store) return;
+      const aiUris = this.store.state.aiPinnedTrackUris;
+      if (aiUris.length === 0) return;
+
+      // 查找所有 pinned track 的 title 元素
+      const pinnedArea = document.querySelector('.pf-pinned-panel');
+      if (!pinnedArea) return;
+
+      const trackPanels = pinnedArea.querySelectorAll('[data-track-uri]');
+      trackPanels.forEach((panel) => {
+        const uri = panel.getAttribute('data-track-uri');
+        if (!uri || !aiUris.includes(uri)) return;
+
+        // 检查是否已注入
+        if (panel.querySelector('.openperfetto-ai-pin-badge')) return;
+
+        // 查找 track title 元素
+        const titleEl = panel.querySelector('.pf-track-title');
+        if (!titleEl) return;
+
+        // 注入 AI badge
+        const badge = document.createElement('span');
+        badge.className = 'openperfetto-ai-pin-badge';
+        badge.title = 'AI Pinned';
+        badge.innerHTML = '<i class="pf-icon" style="font-size:12px">psychology</i>';
+        titleEl.insertBefore(badge, titleEl.firstChild);
+      });
+    };
+
+    // 初始执行一次
+    setTimeout(injectBadges, 500);
+
+    // 设置 MutationObserver 监听 DOM 变化
+    const targetNode = document.querySelector('.pf-panels-container') || document.body;
+    this.aiPinObserver = new MutationObserver(() => {
+      // 防抖：避免频繁触发
+      requestAnimationFrame(injectBadges);
+    });
+
+    this.aiPinObserver.observe(targetNode, {
+      childList: true,
+      subtree: true,
+    });
   }
 }

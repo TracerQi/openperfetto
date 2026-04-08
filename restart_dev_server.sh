@@ -1,6 +1,24 @@
 #!/bin/bash
 cd /mnt/d/1aLq/ProFile/perfetto
-rm -f out/ui/watch.lock
+# 清理已有构建实例（与 run_build.sh 一致的逻辑）
+LOCKFILE=out/ui/watch.lock
+if [ -f "$LOCKFILE" ]; then
+  OLD_PID=$(cat "$LOCKFILE" 2>/dev/null | tr -d '[:space:]')
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    echo "Killing existing build.js instance (PID=$OLD_PID)..."
+    kill "$OLD_PID" 2>/dev/null
+    sleep 2
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+      kill -9 "$OLD_PID" 2>/dev/null
+      sleep 1
+    fi
+  fi
+  rm -f "$LOCKFILE"
+fi
+pkill -f 'tsc --project.*perfetto.*--watch' 2>/dev/null
+pkill -f 'rollup.*perfetto.*--watch' 2>/dev/null
+sleep 1
+
 export PATH=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/perfetto/third_party/gn:/mnt/d/1aLq/ProFile/perfetto/third_party/ninja:/usr/bin:/bin
 export EMSDK=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk
 export EM_CONFIG=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk/.emscripten

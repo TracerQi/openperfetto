@@ -66,6 +66,8 @@ export class OpenPerfettoPage
 
   /** 设置面板是否打开 */
   private settingsOpen: boolean = false;
+  /** 设置面板初始打开的tab */
+  private settingsInitialTab: string = 'general';
 
   view({attrs}: m.CVnode<OpenPerfettoPageAttrs>): m.Children {
     const {trace, store, agentLoop} = attrs;
@@ -100,6 +102,11 @@ export class OpenPerfettoPage
               store,
               collapsed: this.moduleCollapsed.searchPin,
               onToggleCollapse: () => this.toggleModule('searchPin'),
+              onOpenSettingsPreset: () => {
+                this.settingsInitialTab = 'presets';
+                this.settingsOpen = true;
+                m.redraw();
+              },
             }),
           ),
 
@@ -150,8 +157,10 @@ export class OpenPerfettoPage
         m(Settings, {
           store,
           isOpen: this.settingsOpen,
+          initialTab: this.settingsInitialTab,
           onClose: () => {
             this.settingsOpen = false;
+            this.settingsInitialTab = 'general';
             m.redraw();
           },
         }),
