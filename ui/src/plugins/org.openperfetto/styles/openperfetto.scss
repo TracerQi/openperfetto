@@ -1431,3 +1431,100 @@ $spacing-lg: 16px;
   color: var(--pf-color-text-secondary, #999);
   margin-top: $spacing-md;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// OpenPerfetto 固定侧边栏布局
+// ═══════════════════════════════════════════════════════════════
+
+.openperfetto-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--openperfetto-sidebar-width, calc((1 - 0.618) * 100vw));
+  z-index: 10;
+  background: var(--pf-color-surface, #fff);
+  border-right: 1px solid var(--pf-color-border, #e0e0e0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  &--collapsed {
+    display: none;
+  }
+
+  // 右边缘拖拽手柄
+  &__resize-handle {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 11;
+
+    &:hover,
+    &--active {
+      background-color: var(--pf-color-primary, #1a73e8);
+      opacity: 0.3;
+    }
+  }
+}
+
+// Mithril 挂载容器（填满侧边栏剩余空间）
+.openperfetto-sidebar-mroot {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+// 无 trace 时的占位样式
+.openperfetto-no-trace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--pf-color-text-secondary, #999);
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+}
+
+// 独立展开按钮（新侧边栏关闭时显示，嵌入旧侧边栏汉堡按钮左侧）
+.openperfetto-toggle-btn {
+  position: fixed;
+  z-index: 5;
+  top: 6px;
+  visibility: visible;
+  transition: left 0.15s var(--anim-easing, ease);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  font-size: 26px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--pf-sidebar-on-surface);
+  padding: 0;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  &:active {
+    background: rgba(0, 0, 0, 0.12);
+  }
+
+  i {
+    font-size: inherit;
+  }
+}

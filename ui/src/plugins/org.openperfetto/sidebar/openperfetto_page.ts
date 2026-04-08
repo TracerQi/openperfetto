@@ -30,6 +30,7 @@ export interface OpenPerfettoPageAttrs {
   trace: Trace;
   store: Store<OpenPerfettoState>;
   agentLoop: AgentLoop;
+  onCollapse?: () => void; // 可选回调：折叠侧边栏
 }
 
 /**
@@ -83,6 +84,7 @@ export class OpenPerfettoPage
             store.edit((draft) => {
               draft.theme = draft.theme === 'light' ? 'dark' : 'light';
             }),
+          onCollapse: attrs.onCollapse,
         }),
 
         // 可滚动内容区域

@@ -22,6 +22,7 @@ import {Button} from '../../../widgets/button';
 export interface TopBarAttrs {
   store: Store<OpenPerfettoState>;
   onThemeToggle: () => void;
+  onCollapse?: () => void; // 可选回调：折叠侧边栏
 }
 
 /**
@@ -50,6 +51,14 @@ export class TopBar implements m.ClassComponent<TopBarAttrs> {
 
       // 操作按钮组
       m('.openperfetto-topbar__actions', [
+        // 折叠侧边栏按钮（仅当 onCollapse 回调存在时显示）
+        attrs.onCollapse &&
+          m(Button, {
+            icon: 'chevron_left',
+            onclick: attrs.onCollapse,
+            title: 'Collapse sidebar',
+            compact: true,
+          }),
         // 主题切换
         m(Button, {
           icon: state.theme === 'light' ? 'dark_mode' : 'light_mode',

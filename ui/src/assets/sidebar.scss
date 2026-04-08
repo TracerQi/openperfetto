@@ -183,6 +183,13 @@ li.pf-sidebar__item {
   }
 }
 
+// OpenPerfetto toggle button visible: shift menu button right
+body.openperfetto-toggle-active {
+  .pf-sidebar.pf-sidebar--hidden .pf-sidebar-button {
+    left: 46px;
+  }
+}
+
 .pf-sidebar .pf-sidebar-button {
   font-size: 26px;
   position: fixed;

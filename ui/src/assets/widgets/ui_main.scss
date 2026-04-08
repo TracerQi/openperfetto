@@ -38,3 +38,13 @@
     overflow: auto;
   }
 }
+
+// OpenPerfetto 侧边栏激活时：margin推挤主区域，完全隐藏旧侧边栏
+.pf-ui-main.pf-ui-main--openperfetto-active {
+  margin-left: var(--openperfetto-sidebar-width, calc((1 - 0.618) * 100vw));
+  width: calc(100% - var(--openperfetto-sidebar-width, calc((1 - 0.618) * 100vw)));
+
+  .pf-sidebar {
+    display: none;
+  }
+}

@@ -145,6 +145,17 @@ bash run_build.sh
 node ui/build.js --no-depscheck --only-wasm-memory64 --no-override-gn-args
 ```
 
+**Windows PowerShell 中通过 WSL 启动（后台模式）**：
+
+```powershell
+# 先清理端口占用（以10000为例）
+$proc = Get-NetTCPConnection -LocalPort 10000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
+if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+
+# 启动增量编译 + dev server（在 WSL 后台运行）
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+```
+
 **`run_build.sh` 做了什么**：
 1. 清除旧的 `watch.lock` 文件
 2. 设置环境变量（PATH、EMSDK、NODE_OPTIONS）
@@ -194,7 +205,7 @@ wsl curl http://localhost:3001/health
 | Node.js OOM | FATAL ERROR: Allocation failed | 确认 `NODE_OPTIONS=--max-old-space-size=8192` |
 | Rollup SCSS 错误 | Could not resolve '.scss' | 使用 `styles.scss` 包装文件，勿在 TS 中直接 import |
 | CSP 阻止 WebSocket | Console 报 CSP violation | 检查 `ui/src/frontend/index.ts` 中 `connect-src` 配置 |
-| 端口被占用 | EADDRINUSE | `wsl fuser -k <端口>/tcp` |
+| 端口被占用 | EADDRINUSE | WSL: `wsl fuser -k <端口>/tcp`；PowerShell: `$proc = Get-NetTCPConnection -LocalPort <端口> -ErrorAction SilentlyContinue \| Select-Object -ExpandProperty OwningProcess \| Sort-Object -Unique; if ($proc) { $proc \| ForEach-Object { Stop-Process -Id $_ -Force } }` |
 | `.ninja_log` 损坏 | premature end of file | Ninja 自动恢复，无需处理 |
 | Python 3.8 不兼容 | AttributeError: removesuffix | 避免使用 3.9+ 新语法（如 `removesuffix`），改用切片 `str[:-4]` |
 | pnpm lockfile 不同步 | frozen-lockfile 失败 | 使用 `--no-depscheck` 跳过（`run_build.sh` 已包含） |
