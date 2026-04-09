@@ -22,11 +22,16 @@ import {OpenPerfettoPage} from './sidebar/openperfetto_page';
 import {WebSocketClient} from './services/websocket_client';
 import {AgentLoop} from './agent/agent_loop';
 import {focusSearchInput} from './sidebar/search_pin';
+import {syncMarkerRegistry} from './sidebar/marker_registry';
+import {opLogger} from './utils/logger';
 import {
   OpenPerfettoState,
   createDefaultState,
   migrateState,
+  AIMarker,
 } from './types/plugin_state';
+import {Time, time} from '../../base/time';
+import {LONG, NUM} from '../../trace_processor/query_result';
 
 // ─────────────────────────────────────────────────────────────
 // 模块级侧边栏状态（全局单例）
@@ -177,6 +182,205 @@ function updateToggleButton(): void {
   }
 }
 
+// syncMarkerRegistry 已移至 ./sidebar/marker_registry.ts 以避免循环依赖
+
+/**
+ * 处理快捷键 E 标记逻辑
+ * - 已选中 slice: 查询 slice 详细信息并创建标记
+ * - 未选中: 使用鼠标悬停时间戳创建位置标记
+ */
+async function handleMarkerShortcut(): Promise<void> {
+  if (!currentTraceCtx) return;
+
+  const {trace, store} = currentTraceCtx;
+  const selection = trace.selection.selection;
+
+  try {
+    let marker: AIMarker;
+
+    if (selection.kind === 'track_event') {
+      // 已选中 slice：查询详细信息
+      const eventId = selection.eventId;
+      const sql = `
+        SELECT
+          s.id, s.ts, s.dur, s.name AS slice_name,
+          s.track_id,
+          t.name AS thread_name,
+          p.name AS process_name
+        FROM slice s
+        JOIN thread_track tt ON s.track_id = tt.id
+        JOIN thread t ON tt.utid = t.utid
+        LEFT JOIN process p ON t.upid = p.upid
+        WHERE s.id = ${eventId}
+      `;
+
+      const result = await trace.engine.query(sql);
+      let ts = 0n;
+      let dur = 0n;
+      let sliceName = '';
+      let threadName = '';
+      let processName = '';
+      let trackId = 0;
+
+      opLogger.debug('handleMarkerShortcut: querying slice', {eventId});
+
+      for (const it = result.iter({
+        ts: LONG,
+        dur: LONG,
+        slice_name: 'str',
+        track_id: NUM,
+        thread_name: 'str',
+        process_name: 'str',
+      }); it.valid(); it.next()) {
+        ts = it.ts as unknown as bigint;
+        dur = it.dur as unknown as bigint;
+        sliceName = it.slice_name;
+        trackId = Number(it.track_id);
+        threadName = it.thread_name;
+        processName = it.process_name;
+        opLogger.debug('handleMarkerShortcut: slice result', {ts: ts.toString(), dur: dur.toString(), trackId, sliceName, threadName, processName});
+        break;
+      }
+
+      if (ts === 0n) {
+        // 查询失败，降级使用 selection 自身的 ts
+        ts = selection.ts as unknown as bigint;
+        dur = (selection.dur ?? 0n) as unknown as bigint;
+      }
+
+      // 记录当前 timeline 缩放状态
+      const visWindow = trace.timeline.visibleWindow;
+      const timelineState = {
+        visibleWindowStart: visWindow.start.toTime().toString(),
+        visibleWindowEnd: visWindow.end.toTime().toString(),
+      };
+
+      // 通过 trackIds tag 查找正确的 track URI（原 /thread_track_${id} 格式在 workspace 中不存在）
+      let relatedTrackUri = '';
+      if (trackId > 0) {
+        const matchingTrack = trace.tracks
+          .getAllTracks()
+          .find((t) => t.tags?.trackIds?.includes(trackId));
+        if (matchingTrack) {
+          relatedTrackUri = matchingTrack.uri;
+          opLogger.debug('handleMarkerShortcut: found relatedTrackUri', {trackId, uri: relatedTrackUri});
+        } else {
+          opLogger.warn(`handleMarkerShortcut: no track found for trackId=${trackId}`);
+        }
+      }
+
+      // 创建 Perfetto Note
+      const noteId = createPerfettoNote(trace, ts, dur);
+
+      marker = {
+        id: noteId,
+        sliceId: eventId,
+        timestamp: ts,
+        duration: dur,
+        name: sliceName || 'User Marker',
+        note: '',
+        severity: 'info',
+        createdAt: Date.now(),
+        isAI: false,
+        processName: processName || '',
+        threadName: threadName || '',
+        sliceName: sliceName || '',
+        color: '#34a853',
+        timelineState,
+        relatedTrackUri,
+      };
+    } else {
+      // 未选中 slice：优先使用鼠标悬停时间戳，降级使用可视窗口中点
+      const hoverTs = trace.timeline.hoverCursorTimestamp;
+      const visWindow = trace.timeline.visibleWindow;
+      let ts: time;
+      if (hoverTs !== undefined) {
+        ts = hoverTs;
+        opLogger.debug('handleMarkerShortcut: using hover timestamp', {ts: ts.toString()});
+      } else {
+        // 降级：使用当前可视窗口的中间时间点
+        const start = visWindow.start.toTime();
+        const end = visWindow.end.toTime();
+        ts = Time.fromRaw(start + (end - start) / 2n);
+        opLogger.info('handleMarkerShortcut: no hover, using visible window midpoint', {ts: ts.toString()});
+      }
+
+      // 记录当前 timeline 缩放状态
+      const timelineState = {
+        visibleWindowStart: visWindow.start.toTime().toString(),
+        visibleWindowEnd: visWindow.end.toTime().toString(),
+      };
+
+      // 创建 Perfetto Note
+      const noteId = createPerfettoNote(trace, ts, 0n);
+
+      marker = {
+        id: noteId,
+        sliceId: 0,
+        timestamp: ts,
+        duration: 0n,
+        name: 'Position Marker',
+        note: '',
+        severity: 'info',
+        createdAt: Date.now(),
+        isAI: false,
+        processName: '',
+        threadName: '',
+        sliceName: '',
+        color: '#34a853',
+        timelineState,
+        relatedTrackUri: '',
+      };
+    }
+
+    // 写入 Store（先计算新数组，再 edit，最后同步注册表——避免依赖 store.state 的时序）
+    const updatedMarkers = [...store.state.markers, marker];
+    store.edit((draft) => {
+      draft.markers = updatedMarkers;
+    });
+    syncMarkerRegistry(updatedMarkers);
+    opLogger.info('handleMarkerShortcut: marker created', {
+      id: marker.id,
+      timestamp: marker.timestamp.toString(),
+      sliceId: marker.sliceId,
+      relatedTrackUri: marker.relatedTrackUri,
+      totalMarkers: updatedMarkers.length,
+    });
+
+    // 如果侧边栏关闭则打开
+    if (sidebarState === 'closed') {
+      openSidebar();
+    }
+
+    m.redraw();
+  } catch (error) {
+    console.error('Failed to create marker:', error);
+  }
+}
+
+/**
+ * 创建 Perfetto 原生 Note（在时间轴上显示标记旗帜）
+ *
+ * 注意：始终使用 addNote（DEFAULT 类型）而非 addSpanNote。
+ * 原因：notes_panel.ts 对 SPAN 类型的 Note 直接走 drawAreaMarker 分支，
+ * 不查询 __openperfettoMarkerRegistry，导致圆形序号永远不会显示。
+ */
+function createPerfettoNote(trace: Trace, ts: bigint, _dur: bigint): string {
+  try {
+    const time = Time.fromRaw(ts);
+    const noteId = trace.notes.addNote({
+      timestamp: time,
+      color: '#34a853',
+      text: 'User Marker',
+    });
+    opLogger.debug('createPerfettoNote: note created', {noteId, ts: ts.toString()});
+    return noteId;
+  } catch (e) {
+    opLogger.warn('createPerfettoNote: Notes API error', e);
+    return `marker_${Date.now()}`;
+  }
+}
+
 /**
  * OpenPerfetto 插件
  *
@@ -233,6 +437,21 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
         }
         // 延迟聚焦，确保 DOM 已更新
         setTimeout(() => focusSearchInput(), 50);
+      }
+    });
+
+    // 快捷键 E：在当前选中位置或鼠标悬停位置添加标记
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      // 跳过输入控件中的按键
+      const target = e.target as HTMLElement;
+      if (!target) return;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+
+      if (e.key === 'e' || e.key === 'E') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return; // 不拦截组合键
+        e.preventDefault();
+        handleMarkerShortcut();
       }
     });
 
@@ -323,6 +542,9 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
         draft.initialized = true;
       });
     }
+
+    // 初始化全局标记注册表
+    syncMarkerRegistry(this.store.state.markers);
 
     // 2. 获取 WebSocket 客户端并绑定状态
     this.wsClient = WebSocketClient.getInstance();

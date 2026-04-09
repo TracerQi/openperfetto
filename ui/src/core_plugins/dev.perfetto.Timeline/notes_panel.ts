@@ -29,6 +29,8 @@ import {TimelineToolbar} from './timeline_toolbar';
 const FLAG_WIDTH = 16;
 const AREA_TRIANGLE_WIDTH = 10;
 const FLAG = `\uE153`;
+const CIRCLE_RADIUS = 9;
+const CIRCLE_OFFSET = 12;
 
 function toSummary(s: string) {
   const newlineIndex = s.indexOf('\n') > 0 ? s.indexOf('\n') : s.length;
@@ -133,6 +135,10 @@ export class NotesPanel {
     ctx.textBaseline = 'bottom';
     ctx.font = '10px Helvetica';
 
+    const opMarkerRegistry = (window as any).__openperfettoMarkerRegistry as
+      | Map<string, {index: number; isAI: boolean; note: string; color: string}>
+      | undefined;
+
     for (const note of this.trace.notes.notes.values()) {
       const timestamp = getStartTimestamp(note);
       // TODO(hjd): We should still render area selection marks in viewport is
@@ -164,22 +170,40 @@ export class NotesPanel {
           isSelected,
         );
       } else {
-        this.drawFlag(ctx, left, size.height, note.color, isSelected);
+        const markerInfo = opMarkerRegistry?.get(note.id);
+        if (markerInfo) {
+          this.drawCircleMarker(
+            ctx,
+            left,
+            size.height,
+            markerInfo.color,
+            markerInfo.index,
+            isSelected,
+          );
+        } else {
+          this.drawFlag(ctx, left, size.height, note.color, isSelected);
+        }
       }
 
-      if (note.text) {
-        const summary = toSummary(note.text);
+      // 渲染标记文本
+      const markerInfoForText = opMarkerRegistry?.get(note.id);
+      const displayText = markerInfoForText ? markerInfoForText.note : note.text;
+      if (displayText) {
+        const summary = toSummary(displayText);
         const measured = ctx.measureText(summary);
+        const textLeft = markerInfoForText
+          ? left + CIRCLE_OFFSET + CIRCLE_RADIUS + 4
+          : left + FLAG_WIDTH + 2;
         // Add a white semi-transparent background for the text.
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.fillRect(
-          left + FLAG_WIDTH + 2,
+          textLeft,
           size.height + 2,
           measured.width + 2,
           -12,
         );
         ctx.fillStyle = '#3c4b5d';
-        ctx.fillText(summary, left + FLAG_WIDTH + 3, size.height + 1);
+        ctx.fillText(summary, textLeft + 1, size.height + 1);
       }
     }
 
@@ -237,6 +261,46 @@ export class NotesPanel {
     ctx.moveTo(startDraw, topOffset);
     ctx.lineTo(xEnd, topOffset);
     ctx.stroke();
+  }
+
+  private drawCircleMarker(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    height: number,
+    color: string,
+    index: number,
+    isSelected: boolean,
+  ) {
+    const cy = height / 2;
+    const cx = x + CIRCLE_OFFSET;
+
+    // 绘制填充圆
+    ctx.beginPath();
+    ctx.arc(cx, cy, CIRCLE_RADIUS, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // 选中状态白色边框
+    if (isSelected) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // 绘制序号文字
+    const prevFont = ctx.font;
+    const prevBaseline = ctx.textBaseline;
+    const prevAlign = ctx.textAlign;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${index}`, cx, cy);
+
+    // 恢复设置
+    ctx.font = prevFont;
+    ctx.textBaseline = prevBaseline;
+    ctx.textAlign = prevAlign;
   }
 
   private drawFlag(
@@ -298,6 +362,15 @@ export class NotesPanel {
           x > timescale.timeToPx(note.end) - AREA_TRIANGLE_WIDTH)
       );
     } else {
+      const opMarkerRegistry = (window as any).__openperfettoMarkerRegistry as
+        | Map<string, {index: number; isAI: boolean; note: string; color: string}>
+        | undefined;
+      if (opMarkerRegistry?.has(note.id)) {
+        // 圆形碰撞检测
+        const cx = noteX + CIRCLE_OFFSET;
+        const dx = x - cx;
+        return dx * dx <= CIRCLE_RADIUS * CIRCLE_RADIUS;
+      }
       const width = FLAG_WIDTH;
       return noteX <= x && x < noteX + width;
     }

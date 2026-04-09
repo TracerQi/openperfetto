@@ -24,6 +24,9 @@
 import {Trace} from '../../../public/trace';
 import {Time} from '../../../base/time';
 import {ITool, ToolDefinition, ToolExecutionResult} from './tool_registry';
+import {DEFAULT_AI_ZOOM_DURATION_NS} from '../types/plugin_state';
+import {LONG, NUM} from '../../../trace_processor/query_result';
+import {opLogger} from '../utils/logger';
 
 export class MarkPositionTool implements ITool {
   readonly definition: ToolDefinition = {
@@ -73,15 +76,43 @@ AI-created markers are visually distinguished.`,
 
     try {
       let timestamp: bigint | undefined;
+      let duration: bigint = 0n;
+      let sliceName = '';
+      let threadName = '';
+      let processName = '';
+      let sliceTrackId = 0;
 
       // 从 sliceId 获取时间戳
       if (args.sliceId !== undefined) {
         const sliceId = args.sliceId as number;
-        const sql = `SELECT ts FROM slice WHERE id = ${sliceId}`;
+        opLogger.debug('mark_position: querying slice', {sliceId});
+        const sql = `
+          SELECT s.ts, s.dur, s.name AS slice_name,
+                 s.track_id,
+                 t.name AS thread_name, p.name AS process_name
+          FROM slice s
+          JOIN thread_track tt ON s.track_id = tt.id
+          JOIN thread t ON tt.utid = t.utid
+          LEFT JOIN process p ON t.upid = p.upid
+          WHERE s.id = ${sliceId}
+        `;
         const result = await this.trace.engine.query(sql);
 
-        for (const it = result.iter({ts: 'bigint'}); it.valid(); it.next()) {
+        for (const it = result.iter({
+          ts: LONG,
+          dur: LONG,
+          track_id: NUM,
+          slice_name: 'str',
+          thread_name: 'str',
+          process_name: 'str',
+        }); it.valid(); it.next()) {
           timestamp = (it.ts as unknown as bigint | undefined) ?? undefined;
+          duration = (it.dur as unknown as bigint) ?? 0n;
+          sliceTrackId = Number(it.track_id);
+          sliceName = it.slice_name ?? '';
+          threadName = it.thread_name ?? '';
+          processName = it.process_name ?? '';
+          opLogger.debug('mark_position: slice found', {sliceTrackId, sliceName, threadName, processName});
           break;
         }
 
@@ -123,13 +154,41 @@ AI-created markers are visually distinguished.`,
         markerId = `marker_${Date.now()}`;
       }
 
+      // AI 标记使用默认缩放窗口
+      const halfDur = BigInt(DEFAULT_AI_ZOOM_DURATION_NS) / 2n;
+      const defaultTimelineState = {
+        visibleWindowStart: (timestamp - halfDur).toString(),
+        visibleWindowEnd: (timestamp + halfDur).toString(),
+      };
+
+      // 通过 trackIds tag 查找正确的 track URI（workspace 中不存在 /thread_track_${id} 这种自定义格式）
+      let relatedTrackUri = '';
+      if (sliceTrackId > 0) {
+        const matchingTrack = this.trace.tracks
+          .getAllTracks()
+          .find((t) => t.tags?.trackIds?.includes(sliceTrackId));
+        if (matchingTrack) {
+          relatedTrackUri = matchingTrack.uri;
+          opLogger.debug('mark_position: found relatedTrackUri', {sliceTrackId, uri: relatedTrackUri});
+        } else {
+          opLogger.warn(`mark_position: no track found for sliceTrackId=${sliceTrackId}`);
+        }
+      }
+
       return {
         success: true,
         data: {
           markerId,
           timestamp: timestamp.toString(),
+          duration: (duration ?? 0n).toString(),
+          sliceId: args.sliceId ?? 0,
           note: noteText,
           color,
+          processName: processName ?? '',
+          threadName: threadName ?? '',
+          sliceName: sliceName ?? '',
+          timelineState: defaultTimelineState,
+          relatedTrackUri,
           message: `Marker added at ${timestamp}`,
         },
         executionTimeMs: performance.now() - startTime,

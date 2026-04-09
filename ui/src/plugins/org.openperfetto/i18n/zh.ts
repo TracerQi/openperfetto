@@ -53,6 +53,8 @@ export const zh: Record<string, string> = {
   'markers.syncFromSession': '同步AI标记',
   'markers.clearAll': '清空所有',
   'markers.editNote': '编辑备注',
+  'markers.hint': '选中Slice后按E键添加标记',
+  'markers.addNote': '添加备注...',
 
   // AI Chat Module
   'aiChat.title': 'AI 对话',

@@ -222,13 +222,15 @@ $spacing-lg: 16px;
 
 .openperfetto-module__content {
   padding: $spacing-md;
-  overflow-y: auto;
+  // overflow-y 由各子组件自行管理（如 markers__list 的 max-height），
+  // 此处不设置 overflow-y 以避免与内层滚动容器产生双滚动条
 
   &--flex {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow-y: auto; // flex 模式（如 AI Chat）需要自身滚动
   }
 }
 
@@ -1119,6 +1121,84 @@ $spacing-lg: 16px;
   color: var(--pf-color-text-secondary, #666);
 }
 
+.openperfetto-markers__index-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.openperfetto-markers__ai-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+  flex-shrink: 0;
+
+  .pf-icon {
+    font-size: 12px;
+  }
+}
+
+.openperfetto-markers__location {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.openperfetto-markers__process {
+  color: var(--pf-color-text, #333);
+}
+
+.openperfetto-markers__thread {
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.openperfetto-markers__slice-tag {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--pf-color-primary, #1a73e8);
+  margin-right: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.openperfetto-markers__note-placeholder {
+  margin-top: $spacing-xs;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--pf-color-text-secondary, #999);
+  cursor: text;
+  padding: $spacing-xs;
+
+  &:hover {
+    color: var(--pf-color-primary, #1a73e8);
+  }
+}
+
+.openperfetto-markers__hint {
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #999);
+  text-align: center;
+  margin-top: $spacing-xs;
+}
+
 .openperfetto-markers__severity {
   width: 8px;
   height: 8px;
@@ -1221,6 +1301,24 @@ $spacing-lg: 16px;
 
   .openperfetto-markers__item:hover & {
     opacity: 1;
+  }
+}
+
+.openperfetto-page--dark {
+  .openperfetto-markers__process {
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+
+  .openperfetto-markers__thread {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+
+  .openperfetto-markers__note-placeholder {
+    color: var(--pf-color-text-secondary-dark, #777);
+
+    &:hover {
+      color: var(--pf-color-primary, #8ab4f8);
+    }
   }
 }
 

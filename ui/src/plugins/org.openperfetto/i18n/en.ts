@@ -53,6 +53,8 @@ export const en: Record<string, string> = {
   'markers.syncFromSession': 'Sync AI Markers',
   'markers.clearAll': 'Clear All',
   'markers.editNote': 'Edit Note',
+  'markers.hint': 'Select a slice and press E to add marker',
+  'markers.addNote': 'Add note...',
 
   // AI Chat Module
   'aiChat.title': 'AI Chat',

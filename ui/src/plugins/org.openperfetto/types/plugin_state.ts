@@ -58,7 +58,10 @@ export interface OpenPerfettoState {
 }
 
 /** 当前状态版本 */
-export const CURRENT_STATE_VERSION = 4;
+export const CURRENT_STATE_VERSION = 6;
+
+/** AI 标记默认缩放窗口宽度（纳秒），500ms */
+export const DEFAULT_AI_ZOOM_DURATION_NS = 500_000_000;
 
 /**
  * 默认预置场景
@@ -180,6 +183,33 @@ export const migrateState: Migrate<OpenPerfettoState> = (
     state.version = 4;
   }
 
+  // 版本 4 -> 5: AIMarker 接口扩展，添加 isAI/processName/threadName/sliceName/color 字段
+  if (version < 5) {
+    const markers = (state as Record<string, unknown>).markers as Array<Record<string, unknown>> | undefined;
+    if (markers && Array.isArray(markers)) {
+      for (const marker of markers) {
+        if (marker.isAI === undefined) marker.isAI = true; // 旧标记默认为AI标记
+        if (marker.processName === undefined) marker.processName = '';
+        if (marker.threadName === undefined) marker.threadName = '';
+        if (marker.sliceName === undefined) marker.sliceName = '';
+        if (marker.color === undefined) marker.color = '#4285f4';
+      }
+    }
+    state.version = 5;
+  }
+
+  // 版本 5 -> 6: AIMarker 新增 timelineState 和 relatedTrackUri 字段
+  if (version < 6) {
+    const markers = (state as Record<string, unknown>).markers as Array<Record<string, unknown>> | undefined;
+    if (markers && Array.isArray(markers)) {
+      for (const marker of markers) {
+        if (marker.timelineState === undefined) marker.timelineState = undefined;
+        if (marker.relatedTrackUri === undefined) marker.relatedTrackUri = undefined;
+      }
+    }
+    state.version = 6;
+  }
+
   // 确保所有必需字段存在
   return {
     ...createDefaultState(),
@@ -227,6 +257,23 @@ export interface AIMarker {
   note: string;
   severity: 'info' | 'warning' | 'error';
   createdAt: number;
+  /** 是否为AI创建的标记 */
+  isAI: boolean;
+  /** 进程名 */
+  processName: string;
+  /** 线程名 */
+  threadName: string;
+  /** Slice的Tag/名称 */
+  sliceName: string;
+  /** 标记颜色 */
+  color: string;
+  /** 标记时的 timeline 缩放状态 */
+  timelineState?: {
+    visibleWindowStart: string;  // bigint 序列化
+    visibleWindowEnd: string;
+  };
+  /** 关联的 Track URI（用于跳转时展开） */
+  relatedTrackUri?: string;
 }
 
 export interface AIPinnedTrack {

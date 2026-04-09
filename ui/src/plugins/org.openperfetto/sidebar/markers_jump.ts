@@ -27,7 +27,10 @@ import m from 'mithril';
 import {Trace} from '../../../public/trace';
 import {Time} from '../../../base/time';
 import {Store} from '../../../base/store';
-import {OpenPerfettoState, AIMarker} from '../types/plugin_state';
+import {HighPrecisionTimeSpan} from '../../../base/high_precision_time_span';
+import {OpenPerfettoState, AIMarker, DEFAULT_AI_ZOOM_DURATION_NS} from '../types/plugin_state';
+import {syncMarkerRegistry} from './marker_registry';
+import {opLogger} from '../utils/logger';
 import {t} from '../i18n';
 import {Icon} from '../../../widgets/icon';
 import {Button} from '../../../widgets/button';
@@ -84,7 +87,7 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
 
     return m('.openperfetto-markers', [
       // 工具栏
-      this.renderToolbar(store, state.locale),
+      this.renderToolbar(trace, store, state.locale),
 
       // 标记列表
       markers.length === 0
@@ -97,6 +100,7 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
    * 渲染工具栏
    */
   private renderToolbar(
+    trace: Trace,
     store: Store<OpenPerfettoState>,
     locale: 'zh' | 'en',
   ): m.Children {
@@ -124,7 +128,7 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
       markers.length > 0 &&
         m(Button, {
           icon: 'delete_sweep',
-          onclick: () => this.clearAllMarkers(store),
+          onclick: () => this.clearAllMarkers(store, trace),
           title: locale === 'zh' ? '清空所有标记' : 'Clear all markers',
           compact: true,
         }),
@@ -138,6 +142,12 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
     return m('.openperfetto-markers__empty', [
       m(Icon, {icon: 'bookmark_border'}),
       m('span', t(locale, 'markers.noMarkers')),
+      m(
+        '.openperfetto-markers__hint',
+        locale === 'zh'
+          ? '选中Slice后按E键添加标记，或由AI自动标记'
+          : 'Select a slice and press E to add marker, or let AI mark automatically',
+      ),
     ]);
   }
 
@@ -174,7 +184,6 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
     locale: 'zh' | 'en',
   ): m.Children {
     const isEditing = this.editingMarkerId === marker.id;
-    const severityClass = `openperfetto-markers__severity--${marker.severity}`;
 
     return m(
       '.openperfetto-markers__item',
@@ -183,57 +192,73 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
         onclick: () => this.navigateToMarker(trace, marker),
       },
       [
-        // 序号和严重性指示器
+        // 左侧：圆形序号 + AI图标
         m('.openperfetto-markers__item-left', [
-          m('.openperfetto-markers__index', `#${index}`),
-          m(`.openperfetto-markers__severity ${severityClass}`, {
-            title: t(locale, `markers.severity.${marker.severity}`),
-          }),
+          m('.openperfetto-markers__index-circle', {
+            style: {backgroundColor: marker.color || '#4285f4'},
+          }, `${index}`),
+          marker.isAI &&
+            m('.openperfetto-markers__ai-badge', {
+              title: 'AI Marker',
+            }, [
+              m(Icon, {icon: 'smart_toy'}),
+            ]),
         ]),
 
         // 主要信息区
         m('.openperfetto-markers__item-main', [
-          m('.openperfetto-markers__name', marker.name),
+          // 第一行：进程 / 线程
+          (marker.processName || marker.threadName) &&
+            m('.openperfetto-markers__location', [
+              marker.processName &&
+                m('span.openperfetto-markers__process', marker.processName),
+              marker.processName && marker.threadName && m('span', ' / '),
+              marker.threadName &&
+                m('span.openperfetto-markers__thread', marker.threadName),
+            ]),
+          // 第二行：Tag (sliceName) + 时间戳
           m('.openperfetto-markers__meta', [
+            marker.sliceName &&
+              m('span.openperfetto-markers__slice-tag', marker.sliceName),
             m('span.openperfetto-markers__timestamp', formatTimestamp(marker.timestamp)),
             marker.duration > 0n &&
               m('span.openperfetto-markers__duration', formatDuration(marker.duration)),
           ]),
-          // 备注区域
+          // 第三行：备注区域
           isEditing
             ? this.renderNoteEditor(store, marker)
-            : marker.note &&
-              m(
-                '.openperfetto-markers__note',
-                {
-                  onclick: (e: Event) => {
-                    e.stopPropagation();
-                    this.startEditNote(marker);
+            : marker.note
+              ? m(
+                  '.openperfetto-markers__note',
+                  {
+                    onclick: (e: Event) => {
+                      e.stopPropagation();
+                      this.startEditNote(marker);
+                    },
+                    title: locale === 'zh' ? '点击编辑' : 'Click to edit',
                   },
-                  title: locale === 'zh' ? '点击编辑' : 'Click to edit',
-                },
-                marker.note,
-              ),
+                  marker.note,
+                )
+              : !isEditing &&
+                m(
+                  '.openperfetto-markers__note-placeholder',
+                  {
+                    onclick: (e: Event) => {
+                      e.stopPropagation();
+                      this.startEditNote(marker);
+                    },
+                  },
+                  locale === 'zh' ? '添加备注...' : 'Add note...',
+                ),
         ]),
 
         // 操作按钮
         m('.openperfetto-markers__item-actions', [
-          !marker.note &&
-            !isEditing &&
-            m(Button, {
-              icon: 'edit_note',
-              onclick: (e: Event) => {
-                e.stopPropagation();
-                this.startEditNote(marker);
-              },
-              title: locale === 'zh' ? '添加备注' : 'Add note',
-              compact: true,
-            }),
           m(Button, {
             icon: 'delete',
             onclick: (e: Event) => {
               e.stopPropagation();
-              this.deleteMarker(store, marker.id);
+              this.deleteMarker(store, trace, marker.id);
             },
             title: t(locale, 'markers.deleteMarker'),
             compact: true,
@@ -294,27 +319,75 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
    */
   private navigateToMarker(trace: Trace, marker: AIMarker): void {
     try {
-      const startTime = Time.fromRaw(marker.timestamp);
-      const endTime = Time.fromRaw(marker.timestamp + marker.duration);
+      opLogger.info('navigateToMarker', {
+        id: marker.id,
+        sliceId: marker.sliceId,
+        relatedTrackUri: marker.relatedTrackUri,
+        timestamp: marker.timestamp.toString(),
+      });
 
-      // 使用 panSpanIntoView 显示完整范围
-      if (marker.duration > 0n) {
-        trace.timeline.panSpanIntoView(startTime, endTime);
+      // 1. 恢复 timeline 缩放状态
+      if (marker.timelineState) {
+        const start = Time.fromRaw(
+          BigInt(marker.timelineState.visibleWindowStart),
+        );
+        const end = Time.fromRaw(
+          BigInt(marker.timelineState.visibleWindowEnd),
+        );
+        const span = HighPrecisionTimeSpan.fromTime(start, end);
+        trace.timeline.setVisibleWindow(span);
+      } else if (marker.isAI) {
+        // AI 标记：使用默认缩放窗口（以标记为中心，宽度 DEFAULT_AI_ZOOM_DURATION_NS）
+        const halfDur = BigInt(DEFAULT_AI_ZOOM_DURATION_NS) / 2n;
+        const start = Time.fromRaw(marker.timestamp - halfDur);
+        const end = Time.fromRaw(marker.timestamp + halfDur);
+        trace.timeline.setVisibleWindow(
+          HighPrecisionTimeSpan.fromTime(start, end),
+        );
       } else {
-        trace.timeline.panIntoView(startTime);
+        // Fallback: 居中导航
+        const startTime = Time.fromRaw(marker.timestamp);
+        if (marker.duration > 0n) {
+          trace.timeline.panSpanIntoView(
+            startTime,
+            Time.fromRaw(marker.timestamp + marker.duration),
+            {align: 'zoom', margin: 0.1},
+          );
+        } else {
+          trace.timeline.panIntoView(startTime, {align: 'center'});
+        }
       }
 
-      // 如果有 sliceId，选择该 slice
+      // 2. 选中 slice（不依赖 selectSqlEvent 的 scrollToSelection，改由我们显式控制展开+滚动）
       if (marker.sliceId) {
+        opLogger.debug('navigateToMarker: selecting slice', {sliceId: marker.sliceId});
+        trace.selection.selectSqlEvent('slice', marker.sliceId, {
+          // scrollToSelection: false —— 不依赖内部滚动，下方显式调用确保展开
+          scrollToSelection: false,
+          switchToCurrentSelectionTab: false,
+        });
+      }
+
+      // 3. 展开折叠的 Track group 并滚动到对应线程位置
+      //    selectSqlEvent 内部的 scrollToSelection 在折叠组场景下可能无法可靠展开，
+      //    此处显式传入 relatedTrackUri + expandGroup: true 确保行为一致
+      if (marker.relatedTrackUri) {
+        opLogger.debug('navigateToMarker: scrollTo with expandGroup', {uri: marker.relatedTrackUri});
+        trace.scrollTo({
+          track: {uri: marker.relatedTrackUri, expandGroup: true},
+        });
+      } else if (marker.sliceId) {
+        // relatedTrackUri 为空时回退：由 selectSqlEvent 负责展开
+        opLogger.debug('navigateToMarker: no relatedTrackUri, falling back to selectSqlEvent scrollToSelection');
         trace.selection.selectSqlEvent('slice', marker.sliceId, {
           scrollToSelection: true,
-          switchToCurrentSelectionTab: true,
+          switchToCurrentSelectionTab: false,
         });
       }
 
       m.redraw();
     } catch (error) {
-      console.error('Navigate to marker failed:', error);
+      opLogger.error('navigateToMarker: failed', error);
     }
   }
 
@@ -337,6 +410,8 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
         marker.note = this.editingNote;
       }
     });
+    // 同步注册表，更新时间轴上显示的备注文本
+    syncMarkerRegistry(store.state.markers);
     this.editingMarkerId = null;
     this.editingNote = '';
     m.redraw();
@@ -354,20 +429,38 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
   /**
    * 删除标记
    */
-  private deleteMarker(store: Store<OpenPerfettoState>, markerId: string): void {
+  private deleteMarker(
+    store: Store<OpenPerfettoState>,
+    trace: Trace,
+    markerId: string,
+  ): void {
+    opLogger.info('deleteMarker', {markerId});
+    // 移除 Perfetto 原生 Note（公开 NoteManager 接口未暴露 removeNote，通过 any 安全调用）
+    (trace.notes as any).removeNote?.(markerId);
+    const updatedMarkers = store.state.markers.filter((m) => m.id !== markerId);
     store.edit((draft) => {
-      draft.markers = draft.markers.filter((m) => m.id !== markerId);
+      draft.markers = updatedMarkers;
     });
+    syncMarkerRegistry(updatedMarkers);
     m.redraw();
   }
 
   /**
    * 清空所有标记
    */
-  private clearAllMarkers(store: Store<OpenPerfettoState>): void {
+  private clearAllMarkers(
+    store: Store<OpenPerfettoState>,
+    trace: Trace,
+  ): void {
+    opLogger.info('clearAllMarkers', {count: store.state.markers.length});
+    // 移除所有 Perfetto 原生 Note（公开 NoteManager 接口未暴露 removeNote，通过 any 安全调用）
+    for (const marker of store.state.markers) {
+      (trace.notes as any).removeNote?.(marker.id);
+    }
     store.edit((draft) => {
       draft.markers = [];
     });
+    syncMarkerRegistry([]);
     m.redraw();
   }
 
@@ -377,8 +470,6 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
   private extractSessionMarkers(
     session: OpenPerfettoState['currentSession'],
   ): AIMarker[] {
-    // 从 session 的 messages 中提取 AI 创建的标记
-    // 这里需要解析 tool call 结果
     if (!session) return [];
 
     const markers: AIMarker[] = [];
@@ -387,7 +478,6 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
       if (msg.toolResult && msg.toolResult.success) {
         const data = msg.toolResult.data as Record<string, unknown> | undefined;
         if (data && data.markerId) {
-          // 这是一个 mark_position 的结果，保留 sliceId 和 duration
           markers.push({
             id: data.markerId as string,
             sliceId: (data.sliceId as number) ?? 0,
@@ -397,6 +487,18 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
             note: '',
             severity: 'info',
             createdAt: Date.now(),
+            isAI: true,
+            processName: (data.processName as string) ?? '',
+            threadName: (data.threadName as string) ?? '',
+            sliceName: (data.sliceName as string) ?? '',
+            color: (data.color as string) ?? '#4285f4',
+            timelineState: data.timelineState
+              ? {
+                  visibleWindowStart: (data.timelineState as any).visibleWindowStart as string,
+                  visibleWindowEnd: (data.timelineState as any).visibleWindowEnd as string,
+                }
+              : undefined,
+            relatedTrackUri: (data.relatedTrackUri as string) ?? '',
           });
         }
       }
@@ -419,6 +521,7 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
       store.edit((draft) => {
         draft.markers = [...draft.markers, ...newMarkers];
       });
+      syncMarkerRegistry(store.state.markers);
       m.redraw();
     }
   }
