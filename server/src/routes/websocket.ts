@@ -422,12 +422,50 @@ async function handleChat(info: ConnectionInfo, message: ClientMessage & { type:
           skillIds: parseResult.markers.map(m => m.skillId),
         });
         
-        // Phase 2: 只记录标记，不执行
-        // Phase 3 会实现 SkillProcessor 来真正执行 Skill
+        // Phase 2: 记录标记到会话统计
         for (const marker of parseResult.markers) {
           await sessionManager.updateStats(session.id, {
             skillInvocation: marker.skillId,
           });
+        }
+        
+        // Phase 3: Skill 标记融合 — 替换标记为格式化的 Skill 描述
+        if (dependencies.skillProcessor) {
+          try {
+            const originalLength = systemPrompt.length;
+            let fusedCount = 0;
+            
+            const enrichedSystemPrompt = await skillMarkerParser.replaceAsync(
+              systemPrompt,
+              async (marker) => {
+                const formatted = await dependencies!.skillProcessor!.formatSkillForPrompt(
+                  marker.skillId,
+                  marker.params
+                );
+                if (formatted) {
+                  fusedCount++;
+                  return formatted;
+                }
+                return `[Skill not found: ${marker.skillId}]`;
+              }
+            );
+            
+            loggerWithTrace.info('Skill markers fused into system prompt', {
+              markersDetected: parseResult.markers.length,
+              markersFused: fusedCount,
+              originalLength,
+              enrichedLength: enrichedSystemPrompt.length,
+            });
+            
+            systemPrompt = enrichedSystemPrompt;
+          } catch (fusionError) {
+            loggerWithTrace.error('Skill marker fusion failed, using original systemPrompt', fusionError as Error, {
+              markersDetected: parseResult.markers.length,
+            });
+            // 降级：保持原始 systemPrompt 不变
+          }
+        } else {
+          loggerWithTrace.debug('SkillProcessor not available, skipping marker fusion');
         }
       }
     }

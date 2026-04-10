@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {ConnectionState} from '../types/plugin_state';
+import {opLogger} from '../utils/logger';
 
 /**
  * WebSocket 消息类型
@@ -139,7 +140,7 @@ export class WebSocketClient {
         this.ws.send(JSON.stringify(message));
         return true;
       } catch (error) {
-        console.error('Failed to send WebSocket message:', error);
+        opLogger.error('Failed to send WebSocket message:', error);
         return false;
       }
     }
@@ -150,7 +151,7 @@ export class WebSocketClient {
       if (this.pendingMessages.length > WebSocketClient.MAX_PENDING_MESSAGES) {
         this.pendingMessages.shift(); // 丢弃最旧的
       }
-      console.warn('WebSocket is not connected, message queued');
+      opLogger.warn('WebSocket not connected, message queued');
     }
     return false;
   }
@@ -193,6 +194,7 @@ export class WebSocketClient {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
+      opLogger.info('WebSocket connected', this.url);
       this.updateState({status: 'connected', agentId: this.generateAgentId()});
       this.startHeartbeat();
       this.flushPendingMessages();
@@ -200,6 +202,7 @@ export class WebSocketClient {
 
     this.ws.onclose = (event) => {
       this.stopHeartbeat();
+      opLogger.info('WebSocket closed', {code: event.code, wasClean: event.wasClean});
       if (event.wasClean) {
         this.updateState({status: 'disconnected'});
       } else {
@@ -236,11 +239,11 @@ export class WebSocketClient {
           try {
             callback(message);
           } catch (error) {
-            console.error('Error in message callback:', error);
+            opLogger.error('Error in message callback:', error);
           }
         });
       } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+        opLogger.error('Failed to parse WebSocket message:', error);
       }
     };
   }
@@ -251,7 +254,7 @@ export class WebSocketClient {
       try {
         callback(state);
       } catch (error) {
-        console.error('Error in state change callback:', error);
+        opLogger.error('Error in state change callback:', error);
       }
     });
   }
@@ -266,6 +269,8 @@ export class WebSocketClient {
     );
 
     this.reconnectAttempts++;
+
+    opLogger.info('WebSocket reconnecting', {attempt: this.reconnectAttempts, delayMs: delay});
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();

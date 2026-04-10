@@ -23,7 +23,8 @@ llm:
   providers:
     openai:
       apiKey: "${OPENAI_API_KEY}"
-      model: "gpt-4o"
+      baseUrl: "${LLM_BASE_URL:-https://api.ofox.ai/v1}"
+      model: "${LLM_MODEL:-openai/gpt-4.1}"
       maxTokens: 16384
     anthropic:
       apiKey: "${ANTHROPIC_API_KEY}"

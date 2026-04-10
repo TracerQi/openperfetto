@@ -29,6 +29,7 @@ import {WebSocketClient} from '../services/websocket_client';
 import {LLMStreamHandler} from '../services/llm_stream_handler';
 import {ToolRegistry, createAllTools} from '../tools';
 import {Verifier, VerificationResult} from './verifier';
+import {opLogger} from '../utils/logger';
 
 /**
  * Agent Loop 状态枚举
@@ -67,7 +68,7 @@ export type AgentLoopEvent =
   | {type: 'LLM_TEXT_DELTA'; text: string}
   | {type: 'LLM_TOOL_USE'; toolCall: ToolCall}
   | {type: 'TOOL_RESULT'; result: ToolResult}
-  | {type: 'LLM_DONE'}
+  | {type: 'LLM_DONE'; usage?: {inputTokens?: number; outputTokens?: number}}
   | {type: 'VERIFICATION_PASSED'; result: VerificationResult}
   | {type: 'VERIFICATION_FAILED'; issues: string[]; result: VerificationResult}
   | {type: 'ERROR'; error: string}
@@ -227,6 +228,15 @@ export class AgentLoop {
    * 发送用户消息，启动分析流程
    */
   async sendMessage(userMessage: string): Promise<void> {
+    // 从终态自动恢复
+    if (
+      this.state === AgentLoopState.ERROR ||
+      this.state === AgentLoopState.CANCELLED ||
+      this.state === AgentLoopState.COMPLETE
+    ) {
+      this.reset();
+    }
+
     if (this.state !== AgentLoopState.IDLE) {
       throw new Error(`Cannot send message in state: ${this.state}`);
     }
@@ -315,6 +325,7 @@ export class AgentLoop {
       return;
     }
 
+    opLogger.debug(`State transition: ${this.state} ← ${event.type}`);
     try {
       switch (this.state) {
         case AgentLoopState.IDLE:
@@ -345,7 +356,7 @@ export class AgentLoop {
           break;
       }
     } catch (error) {
-      console.error(`State transition error:`, error);
+      opLogger.error('State transition error:', error);
       this.state = AgentLoopState.ERROR;
       const errorMsg =
         error instanceof Error ? error.message : String(error);
@@ -510,6 +521,18 @@ export class AgentLoop {
 
       case 'LLM_DONE':
         this.finalizeStreamingMessage();
+        // 记录 token 使用量
+        if (event.usage) {
+          opLogger.info('Token usage', event.usage);
+          this.store.edit((draft) => {
+            if (draft.currentSession) {
+              draft.currentSession.totalInputTokens =
+                (draft.currentSession.totalInputTokens || 0) + (event.usage?.inputTokens || 0);
+              draft.currentSession.totalOutputTokens =
+                (draft.currentSession.totalOutputTokens || 0) + (event.usage?.outputTokens || 0);
+            }
+          });
+        }
         this.state = AgentLoopState.VERIFYING;
         this.updateProgress('验证结果...');
         m.redraw();
@@ -671,6 +694,12 @@ export class AgentLoop {
     const systemPrompt = this.contextManager.getSystemPrompt();
     const messages = this.getSessionMessages();
 
+    opLogger.info('Sending to LLM', {
+      requirePlan,
+      messageCount: this.getSessionMessages().length,
+      scene: this.currentSceneType,
+    });
+
     // 获取 agentId（使用 session ID 或生成 UUID）
     const connState = this.store.state.connectionState;
     const agentId =
@@ -703,8 +732,9 @@ export class AgentLoop {
       onToolUse: (toolCall) => {
         this.transition({type: 'LLM_TOOL_USE', toolCall});
       },
-      onDone: () => {
-        this.transition({type: 'LLM_DONE'});
+      onDone: (usage) => {
+        opLogger.debug('LLM response done, usage:', usage);
+        this.transition({type: 'LLM_DONE', usage});
       },
       onError: (error) => {
         this.transition({type: 'ERROR', error});
@@ -749,7 +779,7 @@ export class AgentLoop {
       }
     } catch (error) {
       // 验证出错不应阻塞流程，视为通过
-      console.warn('Verification failed:', error);
+      opLogger.warn('Verification failed:', error);
       await this.transition({
         type: 'VERIFICATION_PASSED',
         result: {
@@ -769,7 +799,7 @@ export class AgentLoop {
    * 最终化分析
    */
   private finalizeAnalysis(): void {
-    console.log('Analysis completed', {
+    opLogger.info('Analysis completed', {
       sceneType: this.currentSceneType,
       toolCallCount: this.toolCallCount,
       verificationRetries: this.verificationRetries,

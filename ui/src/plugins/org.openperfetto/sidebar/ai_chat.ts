@@ -15,7 +15,7 @@
 import m from 'mithril';
 import {Trace} from '../../../public/trace';
 import {Store} from '../../../base/store';
-import {OpenPerfettoState} from '../types/plugin_state';
+import {OpenPerfettoState, ConnectionState} from '../types/plugin_state';
 import {ChatMessage} from '../types/agent';
 import {AgentLoop, AgentLoopState} from '../agent/agent_loop';
 // t() function will be used when i18n is implemented
@@ -79,13 +79,24 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
       agentState !== AgentLoopState.ERROR &&
       agentState !== AgentLoopState.CANCELLED;
 
+    // 连接状态检查
+    const connectionState = state.connectionState;
+    const isConnected = connectionState.status === 'connected';
+    const canSend =
+      !isProcessing &&
+      isConnected &&
+      (agentState === AgentLoopState.IDLE ||
+        agentState === AgentLoopState.COMPLETE ||
+        agentState === AgentLoopState.ERROR ||
+        agentState === AgentLoopState.CANCELLED);
+
     if (collapsed) {
       return null;
     }
 
     return m('.ai-chat', [
-      // 状态栏
-      this.renderStatusBar(agentLoop, state.locale),
+      // 状态栏（包含连接状态指示器）
+      this.renderStatusBar(agentLoop, state.locale, connectionState, store),
 
       // 消息列表
       m(
@@ -106,7 +117,7 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
       ),
 
       // 输入区域
-      this.renderInputArea(agentLoop, state.locale, isProcessing),
+      this.renderInputArea(agentLoop, state.locale, isProcessing, canSend, store),
     ]);
   }
 
@@ -116,6 +127,8 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
   private renderStatusBar(
     agentLoop: AgentLoop,
     locale: 'zh' | 'en',
+    connectionState: ConnectionState,
+    store?: Store<OpenPerfettoState>,
   ): m.Children {
     const agentState = agentLoop.getState();
     const stateLabel = agentLoop.getStateLabel();
@@ -132,7 +145,10 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     else if (!isIdle) statusClass = 'ai-chat__status--processing';
 
     return m('.ai-chat__status-bar', {class: statusClass}, [
+      // 连接状态指示器
+      this.renderConnectionIndicator(connectionState, locale),
       m('.ai-chat__status-text', stateLabel),
+      // 处理中显示取消按钮
       !isIdle &&
         !isComplete &&
         !isError &&
@@ -145,6 +161,58 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
           },
           [m(Icon, {icon: 'close'}), locale === 'zh' ? '取消' : 'Cancel'],
         ),
+      // 终态显示“新对话”按钮
+      (isComplete || isError || isCancelled) &&
+        store &&
+        m(
+          '.ai-chat__new-chat-btn',
+          {
+            onclick: () => {
+              agentLoop.reset();
+              store.edit((draft) => {
+                draft.currentSession = null;
+              });
+              m.redraw();
+            },
+            title: locale === 'zh' ? '开始新对话' : 'New conversation',
+          },
+          [
+            m(Icon, {icon: 'refresh'}),
+            locale === 'zh' ? '新对话' : 'New Chat',
+          ],
+        ),
+    ]);
+  }
+
+  /**
+   * 渲染连接状态指示器
+   */
+  private renderConnectionIndicator(
+    connectionState: ConnectionState,
+    locale: 'zh' | 'en',
+  ): m.Children {
+    const statusMap: Record<string, {dotClass: string; label: string}> = {
+      connected: {
+        dotClass: 'ai-chat__connection-dot--connected',
+        label: locale === 'zh' ? '已连接' : 'Connected',
+      },
+      connecting: {
+        dotClass: 'ai-chat__connection-dot--connecting',
+        label: locale === 'zh' ? '连接中...' : 'Connecting...',
+      },
+      disconnected: {
+        dotClass: 'ai-chat__connection-dot--disconnected',
+        label: locale === 'zh' ? '未连接' : 'Disconnected',
+      },
+      error: {
+        dotClass: 'ai-chat__connection-dot--error',
+        label: locale === 'zh' ? '连接错误' : 'Connection Error',
+      },
+    };
+    const info = statusMap[connectionState.status];
+    return m('.ai-chat__connection-indicator', {title: info.label}, [
+      m('.ai-chat__connection-dot', {class: info.dotClass}),
+      m('.ai-chat__connection-label', info.label),
     ]);
   }
 
@@ -373,8 +441,23 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     agentLoop: AgentLoop,
     locale: 'zh' | 'en',
     isProcessing: boolean,
+    canSend: boolean,
+    store: Store<OpenPerfettoState>,
   ): m.Children {
+    const agentState = agentLoop.getState();
+    const isTerminalState =
+      agentState === AgentLoopState.ERROR ||
+      agentState === AgentLoopState.CANCELLED;
+
     return m('.ai-chat__input-area', [
+      // ERROR/CANCELLED 状态提示
+      isTerminalState &&
+        m('.ai-chat__reset-hint', {
+          onclick: () => {
+            agentLoop.reset();
+            m.redraw();
+          },
+        }, locale === 'zh' ? '点击重新开始' : 'Click to restart'),
       m('textarea.ai-chat__input', {
         placeholder:
           locale === 'zh'
@@ -389,15 +472,15 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
           // Enter 发送，Shift+Enter 换行
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            this.sendMessage(agentLoop);
+            this.sendMessage(agentLoop, store);
           }
         },
       }),
       m(
         '.ai-chat__send-btn',
         {
-          onclick: () => this.sendMessage(agentLoop),
-          class: isProcessing || !this.inputText.trim()
+          onclick: () => this.sendMessage(agentLoop, store),
+          class: !canSend || !this.inputText.trim()
             ? 'ai-chat__send-btn--disabled'
             : '',
           title: locale === 'zh' ? '发送' : 'Send',
@@ -410,11 +493,38 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
   /**
    * 发送消息
    */
-  private async sendMessage(agentLoop: AgentLoop): Promise<void> {
+  private async sendMessage(
+    agentLoop: AgentLoop,
+    store: Store<OpenPerfettoState>,
+  ): Promise<void> {
     const text = this.inputText.trim();
     if (!text) return;
 
-    if (agentLoop.getState() !== AgentLoopState.IDLE) {
+    // 检查连接状态
+    const connectionState = store.state.connectionState;
+    if (connectionState.status !== 'connected') {
+      store.edit((draft) => {
+        if (draft.currentSession) {
+          draft.currentSession.messages.push({
+            id: `error_${Date.now()}`,
+            role: 'system',
+            content: '发送失败: 未连接到服务器',
+            timestamp: Date.now(),
+          });
+        }
+      });
+      return;
+    }
+
+    // AgentLoop.sendMessage 已内置终态自动恢复，
+    // 非 IDLE 的活跃状态静默返回
+    const agentState = agentLoop.getState();
+    if (
+      agentState !== AgentLoopState.IDLE &&
+      agentState !== AgentLoopState.COMPLETE &&
+      agentState !== AgentLoopState.ERROR &&
+      agentState !== AgentLoopState.CANCELLED
+    ) {
       return;
     }
 
@@ -425,6 +535,17 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
       await agentLoop.sendMessage(text);
     } catch (error) {
       console.error('Failed to send message:', error);
+      // 添加错误消息到对话中
+      store.edit((draft) => {
+        if (draft.currentSession) {
+          draft.currentSession.messages.push({
+            id: `error_${Date.now()}`,
+            role: 'system',
+            content: `发送失败: ${error instanceof Error ? error.message : String(error)}`,
+            timestamp: Date.now(),
+          });
+        }
+      });
     }
   }
 

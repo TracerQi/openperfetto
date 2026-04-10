@@ -655,6 +655,99 @@ $spacing-lg: 16px;
     background-color: var(--pf-color-divider, #ccc);
     cursor: not-allowed;
   }
+
+  &--disabled {
+    background-color: var(--pf-color-divider, #ccc);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+
+// ============================================================================
+// AI Chat - Connection Indicator (Task 3)
+// ============================================================================
+.ai-chat__connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ai-chat__connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &--connected {
+    background-color: #4caf50;
+  }
+
+  &--connecting {
+    background-color: #ff9800;
+    animation: pulse 1.5s infinite;
+  }
+
+  &--disconnected {
+    background-color: #9e9e9e;
+  }
+
+  &--error {
+    background-color: #f44336;
+  }
+}
+
+.ai-chat__connection-label {
+  font-size: 11px;
+  color: var(--pf-color-text-secondary, #666);
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+}
+
+// AI Chat - Reset hint (Task 3/4)
+.ai-chat__reset-hint {
+  font-size: 12px;
+  color: var(--pf-color-primary, #1a73e8);
+  cursor: pointer;
+  text-decoration: underline;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--pf-color-primary-dark, #1557b0);
+  }
+}
+
+// AI Chat - New Chat button (Task 4)
+.ai-chat__new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background-color: transparent;
+  border: 1px solid var(--pf-color-primary, #1a73e8);
+  border-radius: $border-radius;
+  cursor: pointer;
+  color: var(--pf-color-primary, #1a73e8);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-primary, #1a73e8);
+    color: white;
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-primary, #5c9ce6);
+    color: var(--pf-color-primary, #5c9ce6);
+
+    &:hover {
+      background-color: var(--pf-color-primary, #5c9ce6);
+      color: #1e1e1e;
+    }
+  }
 }
 
 // ============================================================================

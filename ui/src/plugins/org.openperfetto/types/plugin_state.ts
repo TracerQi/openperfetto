@@ -232,6 +232,8 @@ export interface AnalysisSession {
   artifacts: Map<string, Artifact>;
   plan: AnalysisPlan | null;
   pinnedTracks: AIPinnedTrack[];
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
 }
 
 export type SceneType =

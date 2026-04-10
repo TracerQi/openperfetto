@@ -290,7 +290,13 @@ class OpenAIProvider implements LLMProvider {
     private readonly model: string,
     private readonly maxTokens: number,
     private readonly baseUrl: string = 'https://api.openai.com/v1'
-  ) {}
+  ) {
+    logger.info('OpenAI provider initialized', {
+      model: this.model,
+      baseUrl: this.baseUrl,
+      maxTokens: this.maxTokens,
+    });
+  }
   
   async *chat(request: LLMRequest): AsyncGenerator<LLMStreamChunk> {
     const messages = this.buildMessages(request);
@@ -300,6 +306,7 @@ class OpenAIProvider implements LLMProvider {
       max_tokens: request.maxTokens ?? this.maxTokens,
       messages,
       stream: true,
+      stream_options: { include_usage: true },
     };
     
     if (request.temperature !== undefined) {
@@ -316,6 +323,13 @@ class OpenAIProvider implements LLMProvider {
         },
       }));
     }
+    
+    logger.debug('OpenAI API request', {
+      url: `${this.baseUrl}/chat/completions`,
+      model: this.model,
+      messageCount: messages.length,
+      hasTools: !!(request.tools && request.tools.length > 0),
+    });
     
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',

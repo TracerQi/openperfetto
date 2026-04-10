@@ -16,6 +16,7 @@ import {Trace} from '../../../public/trace';
 import {NUM} from '../../../trace_processor/query_result';
 import {SceneType} from '../types/plugin_state';
 import {ChatMessage} from '../types/agent';
+import {opLogger} from '../utils/logger';
 
 /**
  * Token 预算配置
@@ -45,6 +46,25 @@ interface SceneBudgetConfig {
  * 上下文管理器
  * 负责构建系统提示、管理 token 预算、压缩历史消息
  */
+/**
+ * 场景到 Skill ID 的静态映射
+ * 前端仅注入 Skill ID 标记，后端负责加载完整 Skill 内容
+ */
+const SCENE_SKILL_MAP: Record<SceneType, string[]> = {
+  scrolling: ['scroll_jank_detection', 'frame_timeline_analysis', 'render_thread_analysis'],
+  startup_cold: ['app_startup_breakdown', 'startup_blocking_calls', 'startup_cpu_analysis'],
+  startup_warm: ['app_startup_breakdown', 'startup_blocking_calls'],
+  startup_hot: ['app_startup_breakdown'],
+  anr: ['anr_root_cause', 'main_thread_blocking', 'binder_timeout_analysis'],
+  lock_contention: ['lock_contention_analysis', 'mutex_wait_analysis'],
+  binder_blocking: ['binder_transaction_analysis', 'binder_timeout_analysis'],
+  io_analysis: ['network_io_analysis', 'thread_state_analysis'],
+  high_load: ['cpu_scheduling_analysis', 'cpu_frequency_analysis', 'thread_state_analysis'],
+  screen_on_off: ['wakelock_analysis', 'cpu_frequency_analysis'],
+  unlock: ['process_overview', 'thread_state_analysis'],
+  general: ['process_overview', 'cpu_scheduling_analysis', 'thread_state_analysis'],
+};
+
 export class ContextManager {
   private trace: Trace;
   private _currentSceneType: SceneType = 'general';
@@ -226,6 +246,12 @@ export class ContextManager {
 
     // 3. Trace 元数据摘要
     parts.push(await this.getTraceMetadataPrompt());
+
+    // 4. 注入场景相关 Skill 标记（后端将融合完整 Skill 内容）
+    const skillMarkers = this.getSkillMarkersForScene(sceneType);
+    if (skillMarkers) {
+      parts.push(skillMarkers);
+    }
 
     this.systemPrompt = parts.join('\n\n---\n\n');
   }
@@ -543,6 +569,42 @@ ${processes.map((p) => `- ${p}`).join('\n')}
 - Frame timeline: ${hasFrameTimeline ? 'YES' : 'NO'}
 - Binder transactions: ${hasBinderData ? 'YES' : 'NO'}
 - Memory counters: ${hasMemoryCounters ? 'YES' : 'NO'}`;
+  }
+
+  /**
+   * 获取场景对应的 Skill 标记
+   * 仅返回 Skill ID 标记，后端会将其解析并替换为完整 Skill 文档
+   */
+  private getSkillMarkersForScene(sceneType: SceneType): string | null {
+    try {
+      const skillIds = SCENE_SKILL_MAP[sceneType];
+      if (!skillIds || skillIds.length === 0) {
+        return null;
+      }
+
+      const markers = skillIds
+        .map((id) => `skill:${id}|{}`)
+        .join('\n');
+
+      opLogger.info(
+        `Injected ${skillIds.length} skill markers for scene "${sceneType}":`,
+        skillIds,
+      );
+
+      return `## Available Analysis Skills
+
+The following skills are available for this analysis scenario. The backend will provide detailed skill documentation.
+Use the invoke_skill tool to execute any of these skills during your analysis.
+
+${markers}`;
+    } catch (e) {
+      opLogger.warn(
+        'Failed to get skills for scene, skipping injection',
+        sceneType,
+        e,
+      );
+      return null;
+    }
   }
 
   private async hasFrameTimeline(): Promise<boolean> {

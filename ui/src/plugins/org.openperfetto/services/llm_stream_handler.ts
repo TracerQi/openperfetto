@@ -14,6 +14,15 @@
 
 import {ToolCall} from '../types/agent';
 import {WebSocketMessage} from './websocket_client';
+import {opLogger} from '../utils/logger';
+
+/**
+ * LLM 流式响应 usage 信息
+ */
+export interface LLMUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+}
 
 /**
  * LLM 流式响应回调接口
@@ -24,7 +33,7 @@ export interface LLMStreamCallbacks {
   /** 收到工具调用 */
   onToolUse: (toolCall: ToolCall) => void;
   /** 流式响应完成 */
-  onDone: () => void;
+  onDone: (usage?: LLMUsage) => void;
   /** 发生错误 */
   onError: (error: string) => void;
 }
@@ -44,6 +53,11 @@ interface LLMStreamMessage {
       arguments: Record<string, unknown>;
     };
     error?: string;
+    usage?: LLMUsage;
+    // 后端实际发送的 tool_use 数据直接在 payload 顶层
+    id?: string;
+    name?: string;
+    arguments?: Record<string, unknown>;
   };
 }
 
@@ -70,6 +84,7 @@ export class LLMStreamHandler {
    * 开始流式监听
    */
   startStream(agentId: string, callbacks: LLMStreamCallbacks): void {
+    opLogger.info('LLM stream started', agentId);
     this.callbacks = callbacks;
     this.currentAgentId = agentId;
     this.isStreaming = true;
@@ -85,6 +100,7 @@ export class LLMStreamHandler {
    * 停止流式监听
    */
   stopStream(): void {
+    opLogger.info('LLM stream stopped', this.currentAgentId);
     this.flushTextBuffer();
     this.isStreaming = false;
     this.callbacks = null;
@@ -132,12 +148,27 @@ export class LLMStreamHandler {
       case 'tool_use':
         // 先刷新缓冲的文本
         this.flushTextBuffer();
-        if (streamMsg.payload?.toolCall) {
-          this.callbacks.onToolUse({
-            id: streamMsg.payload.toolCall.id,
-            name: streamMsg.payload.toolCall.name,
-            arguments: streamMsg.payload.toolCall.arguments,
-          });
+        // 兼容两种格式：
+        // 1. payload.toolCall (spec 格式)
+        // 2. payload 本身就是 {id, name, arguments} (后端实际格式)
+        {
+          const toolPayload = streamMsg.payload as Record<string, unknown> | undefined;
+          const toolCallData = toolPayload?.toolCall ?? toolPayload;
+          if (
+            toolCallData &&
+            typeof toolCallData === 'object' &&
+            'id' in toolCallData &&
+            'name' in toolCallData
+          ) {
+            opLogger.debug('LLM tool_use received', (toolCallData as {name: string}).name);
+            this.callbacks.onToolUse({
+              id: (toolCallData as {id: string}).id,
+              name: (toolCallData as {name: string}).name,
+              arguments:
+                ((toolCallData as unknown) as {arguments: Record<string, unknown>})
+                  .arguments || {},
+            });
+          }
         }
         break;
 
@@ -147,13 +178,24 @@ export class LLMStreamHandler {
 
       case 'error':
         this.flushTextBuffer();
-        this.callbacks.onError(streamMsg.payload?.error || 'Unknown error');
+        {
+          const errorPayload = streamMsg.payload as Record<string, unknown> | undefined;
+          const errorMsg =
+            (errorPayload?.error as string) ||
+            (errorPayload?.message as string) ||
+            'Unknown error';
+          const errorCode = errorPayload?.code as string | undefined;
+          const fullError = errorCode ? `[${errorCode}] ${errorMsg}` : errorMsg;
+          opLogger.error('LLM stream error received', fullError);
+          this.callbacks.onError(fullError);
+        }
         this.isStreaming = false;
         break;
 
       case 'done':
         this.flushTextBuffer();
-        this.callbacks.onDone();
+        opLogger.debug('LLM stream done', streamMsg.payload?.usage);
+        this.callbacks.onDone(streamMsg.payload?.usage);
         this.isStreaming = false;
         break;
     }
