@@ -21,7 +21,6 @@ import {Button} from '../../../widgets/button';
 
 export interface TopBarAttrs {
   store: Store<OpenPerfettoState>;
-  onThemeToggle: () => void;
   onCollapse?: () => void; // 可选回调：折叠侧边栏
 }
 
@@ -30,13 +29,12 @@ export interface TopBarAttrs {
  *
  * 包含：
  * - Logo + 项目名
- * - 主题切换按钮
- * - 语言切换按钮
+ * - 折叠侧边栏按钮
  * - 连接状态指示器
  */
 export class TopBar implements m.ClassComponent<TopBarAttrs> {
   view({attrs}: m.CVnode<TopBarAttrs>): m.Children {
-    const {store, onThemeToggle} = attrs;
+    const {store} = attrs;
     const state = store.state;
 
     return m('.openperfetto-topbar', [
@@ -59,31 +57,12 @@ export class TopBar implements m.ClassComponent<TopBarAttrs> {
             title: 'Collapse sidebar',
             compact: true,
           }),
-        // 主题切换
-        m(Button, {
-          icon: state.theme === 'light' ? 'dark_mode' : 'light_mode',
-          onclick: onThemeToggle,
-          title: t(state.locale, 'topbar.toggleTheme'),
-          compact: true,
-        }),
 
-        // 语言切换
-        m(Button, {
-          icon: 'translate',
-          onclick: () => {
-            store.edit((draft) => {
-              draft.locale = draft.locale === 'zh' ? 'en' : 'zh';
-            });
-          },
-          title: t(state.locale, 'topbar.toggleLanguage'),
-          compact: true,
-        }),
-
-        // 连接状态指示器
+        // 连接状态指示器（使用 data-tooltip 实现即时提示）
         m(
           '.openperfetto-topbar__connection',
           {
-            title: this.getConnectionTooltip(state.connectionState, state.locale),
+            'data-tooltip': this.getConnectionTooltip(state.connectionState, state.locale),
           },
           [
             m('.openperfetto-topbar__connection-indicator', {

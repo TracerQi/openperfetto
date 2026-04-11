@@ -110,7 +110,31 @@ $spacing-lg: 16px;
   display: flex;
   align-items: center;
   padding: $spacing-xs $spacing-sm;
-  cursor: help;
+  cursor: pointer;
+  position: relative;
+
+  // 自定义 tooltip：替代原生 title，消除浏览器 ~2s 延迟
+  &::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 10;
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
 }
 
 .openperfetto-topbar__connection-indicator {
@@ -664,41 +688,39 @@ $spacing-lg: 16px;
 }
 
 // ============================================================================
-// AI Chat - Connection Indicator (Task 3)
+// AI Chat - Core Layout
 // ============================================================================
-.ai-chat__connection-indicator {
+.ai-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ai-chat__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-md;
+}
+
+// Status bar (positioned above input area)
+.ai-chat__status-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.ai-chat__connection-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-
-  &--connected {
-    background-color: #4caf50;
-  }
-
-  &--connecting {
-    background-color: #ff9800;
-    animation: pulse 1.5s infinite;
-  }
-
-  &--disconnected {
-    background-color: #9e9e9e;
-  }
-
-  &--error {
-    background-color: #f44336;
-  }
-}
-
-.ai-chat__connection-label {
+  gap: $spacing-xs;
+  padding: 4px $spacing-sm;
   font-size: 11px;
+  border-top: 1px solid var(--pf-color-divider, #eee);
+  background-color: var(--pf-color-surface-variant, #f8f8f8);
+  flex-shrink: 0;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #333);
+    background-color: var(--pf-color-surface-variant-dark, #2a2a2a);
+  }
+}
+
+.ai-chat__status-text {
   color: var(--pf-color-text-secondary, #666);
 
   .openperfetto-page--dark & {
@@ -706,7 +728,313 @@ $spacing-lg: 16px;
   }
 }
 
-// AI Chat - Reset hint (Task 3/4)
+.ai-chat__status--idle .ai-chat__status-text {
+  color: var(--pf-color-text-secondary, #999);
+}
+
+.ai-chat__status--processing .ai-chat__status-text {
+  color: var(--pf-color-primary, #1a73e8);
+  font-weight: 500;
+}
+
+.ai-chat__status--complete .ai-chat__status-text {
+  color: #4caf50;
+}
+
+.ai-chat__status--error .ai-chat__status-text {
+  color: var(--pf-color-danger, #f44336);
+}
+
+.ai-chat__cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background-color: transparent;
+  border: 1px solid var(--pf-color-danger, #f44336);
+  border-radius: $border-radius;
+  cursor: pointer;
+  color: var(--pf-color-danger, #f44336);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-danger, #f44336);
+    color: white;
+  }
+}
+
+// Welcome section (single container)
+.ai-chat__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-lg $spacing-md;
+  text-align: center;
+}
+
+.ai-chat__welcome-text {
+  font-size: 13px;
+  color: var(--pf-color-text-secondary, #666);
+  margin-bottom: $spacing-md;
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
+}
+
+.ai-chat__welcome-examples {
+  text-align: left;
+  width: 100%;
+  max-width: 280px;
+}
+
+.ai-chat__welcome-examples-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pf-color-text-secondary, #999);
+  margin-bottom: $spacing-xs;
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #777);
+  }
+}
+
+.ai-chat__welcome-example {
+  font-size: 12px;
+  color: var(--pf-color-text, #333);
+  padding: 3px 0;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--pf-color-primary, #1a73e8);
+  }
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-dark, #e0e0e0);
+
+    &:hover {
+      color: var(--pf-color-primary, #5c9ce6);
+    }
+  }
+}
+
+// Input area
+.ai-chat__input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-sm;
+  border-top: 1px solid var(--pf-color-divider, #eee);
+  flex-shrink: 0;
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #333);
+  }
+}
+
+.ai-chat__input {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--pf-color-divider, #ddd);
+  border-radius: $border-radius;
+  padding: $spacing-xs $spacing-sm;
+  font-size: 13px;
+  min-height: 36px;
+  max-height: 120px;
+  outline: none;
+  font-family: inherit;
+  background-color: var(--pf-color-surface, white);
+  color: var(--pf-color-text, #333);
+
+  &:focus {
+    border-color: var(--pf-color-primary, #1a73e8);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .openperfetto-page--dark & {
+    border-color: var(--pf-color-divider-dark, #444);
+    background-color: var(--pf-color-surface-dark, #2a2a2a);
+    color: var(--pf-color-text-dark, #e0e0e0);
+  }
+}
+
+.ai-chat__send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  ursor: pointer;
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+  border: none;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--pf-color-primary-dark, #1557b0);
+  }
+
+  &--disabled {
+    background-color: var(--pf-color-divider, #ccc);
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+
+// Message styles
+.ai-chat__message {
+  margin-bottom: $spacing-sm;
+}
+
+.ai-chat__message-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  margin-bottom: 2px;
+}
+
+.ai-chat__message-icon {
+  font-size: 14px !important;
+}
+
+.ai-chat__message-role {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.ai-chat__message-time {
+  font-size: 10px;
+  color: var(--pf-color-text-secondary, #999);
+  margin-left: auto;
+}
+
+.ai-chat__message-content {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius;
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+
+  .openperfetto-page--dark & {
+    background-color: var(--pf-color-surface-variant-dark, #383838);
+  }
+
+  pre {
+    margin: $spacing-xs 0;
+    padding: $spacing-xs;
+    background-color: var(--pf-color-surface, #eee);
+    border-radius: 2px;
+    overflow-x: auto;
+    font-size: 12px;
+  }
+
+  code {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    padding: 1px 4px;
+    background-color: var(--pf-color-surface, #eee);
+    border-radius: 2px;
+  }
+}
+
+.ai-chat__message--user .ai-chat__message-content {
+  background-color: var(--pf-color-primary, #1a73e8);
+  color: white;
+}
+
+// Loading indicator
+.ai-chat__loading {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm;
+  font-size: 12px;
+  color: var(--pf-color-text-secondary, #666);
+}
+
+.ai-chat__loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--pf-color-divider, #ddd);
+  border-top-color: var(--pf-color-primary, #1a73e8);
+  border-radius: 50%;
+  animation: ai-chat-spin 0.8s linear infinite;
+}
+
+@keyframes ai-chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+// Streaming cursor
+.ai-chat__cursor {
+  animation: ai-chat-blink 1s step-end infinite;
+}
+
+@keyframes ai-chat-blink {
+  50% { opacity: 0; }
+}
+
+// Tool call/result styles
+.ai-chat__tool-call {
+  margin: $spacing-xs 0;
+  padding: $spacing-xs $spacing-sm;
+  border-left: 3px solid var(--pf-color-primary, #1a73e8);
+  background-color: var(--pf-color-surface-variant, #f5f5f5);
+  border-radius: 0 $border-radius $border-radius 0;
+  font-size: 12px;
+}
+
+.ai-chat__tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  font-weight: 500;
+}
+
+.ai-chat__tool-call-args pre {
+  margin: $spacing-xs 0;
+  font-size: 11px;
+  overflow-x: auto;
+}
+
+.ai-chat__tool-result {
+  margin: $spacing-xs 0;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius;
+  font-size: 12px;
+}
+
+.ai-chat__tool-result--success {
+  border-left: 3px solid #4caf50;
+  background-color: rgba(76, 175, 80, 0.08);
+}
+
+.ai-chat__tool-result--error {
+  border-left: 3px solid #f44336;
+  background-color: rgba(244, 67, 54, 0.08);
+}
+
+.ai-chat__tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  font-weight: 500;
+}
+
+.ai-chat__tool-icon {
+  font-size: 14px !important;
+}
+
+// AI Chat - Reset hint
 .ai-chat__reset-hint {
   font-size: 12px;
   color: var(--pf-color-primary, #1a73e8);
@@ -1053,53 +1381,53 @@ $spacing-lg: 16px;
 }
 
 .openperfetto-search-pin__presets {
-  border: 1px solid var(--pf-color-divider, #ddd);
-  border-radius: $border-radius;
-  overflow: hidden;
-
-  .openperfetto-page--dark & {
-    border-color: var(--pf-color-divider-dark, #444);
-  }
-}
-
-.openperfetto-search-pin__presets-header {
   display: flex;
   align-items: center;
-  gap: $spacing-xs;
-  padding: $spacing-xs $spacing-sm;
-  background-color: var(--pf-color-surface-variant, #f5f5f5);
-  font-size: 12px;
-  font-weight: 500;
-
-  .openperfetto-page--dark & {
-    background-color: var(--pf-color-surface-variant-dark, #383838);
-  }
+  flex-wrap: wrap;
+  gap: 6px;
+  row-gap: 4px;
 }
 
-.openperfetto-search-pin__presets-spacer {
-  flex: 1;
+.openperfetto-search-pin__presets-icon {
+  flex-shrink: 0;
+  cursor: default;
+  position: relative;
+  color: var(--pf-color-text-secondary, #666);
+
+  // 自定义 tooltip：替代原生 title，消除浏览器 ~2s 延迟
+  &::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 10;
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
+
+  .openperfetto-page--dark & {
+    color: var(--pf-color-text-secondary-dark, #aaa);
+  }
 }
 
 .openperfetto-search-pin__presets-add-btn {
   flex-shrink: 0;
 }
 
-// chip 卡片容器（横向排列、换行）
-.openperfetto-search-pin__presets-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: $spacing-sm;
-}
 
-.openperfetto-search-pin__presets-empty {
-  padding: $spacing-sm;
-  text-align: center;
-  color: var(--pf-color-text-secondary, #666);
-  font-size: 11px;
-  font-style: italic;
-  width: 100%;
-}
 
 // 预设场景 chip 卡片
 .openperfetto-search-pin__preset-chip {
@@ -1839,12 +2167,17 @@ $spacing-lg: 16px;
 }
 
 // 独立展开按钮（新侧边栏关闭时显示，嵌入旧侧边栏汉堡按钮左侧）
+// 使用 CSS 变量计算 left，与旧侧边栏按钮同步，避免 JS 手动计算不同步
 .openperfetto-toggle-btn {
   position: fixed;
   z-index: 5;
   top: 6px;
   visibility: visible;
-  transition: left 0.15s var(--anim-easing, ease);
+  // 默认：旧侧边栏可见时，定位在旧侧边栏菜单按钮左侧
+  // 旧侧边栏菜单按钮: left = calc(var(--sidebar-width) - 44px)
+  // 本按钮: left = 旧按钮left - 32px(按钮宽) - 4px(间距) = calc(var(--sidebar-width) - 80px)
+  left: calc(var(--sidebar-width) - 80px);
+  transition: left var(--anim-easing) var(--sidebar-timing, 0.15s);
 
   display: flex;
   align-items: center;
@@ -1871,4 +2204,9 @@ $spacing-lg: 16px;
   i {
     font-size: inherit;
   }
+}
+
+// 旧侧边栏折叠时：新侧边栏按钮移到左侧边缘，旧侧边栏按钮由 CSS 规则右移至 46px
+body.pf-old-sidebar-hidden .openperfetto-toggle-btn {
+  left: 10px;
 }

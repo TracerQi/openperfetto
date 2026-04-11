@@ -15,7 +15,7 @@
 import m from 'mithril';
 import {Trace} from '../../../public/trace';
 import {Store} from '../../../base/store';
-import {OpenPerfettoState, ConnectionState} from '../types/plugin_state';
+import {OpenPerfettoState} from '../types/plugin_state';
 import {ChatMessage} from '../types/agent';
 import {AgentLoop, AgentLoopState} from '../agent/agent_loop';
 // t() function will be used when i18n is implemented
@@ -95,9 +95,6 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     }
 
     return m('.ai-chat', [
-      // 状态栏（包含连接状态指示器）
-      this.renderStatusBar(agentLoop, state.locale, connectionState, store),
-
       // 消息列表
       m(
         '.ai-chat__messages',
@@ -116,6 +113,9 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
         ],
       ),
 
+      // 状态栏（位于输入区上方，方便用户看到 AI 状态）
+      this.renderStatusBar(agentLoop, state.locale, store),
+
       // 输入区域
       this.renderInputArea(agentLoop, state.locale, isProcessing, canSend, store),
     ]);
@@ -127,7 +127,6 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
   private renderStatusBar(
     agentLoop: AgentLoop,
     locale: 'zh' | 'en',
-    connectionState: ConnectionState,
     store?: Store<OpenPerfettoState>,
   ): m.Children {
     const agentState = agentLoop.getState();
@@ -145,8 +144,6 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     else if (!isIdle) statusClass = 'ai-chat__status--processing';
 
     return m('.ai-chat__status-bar', {class: statusClass}, [
-      // 连接状态指示器
-      this.renderConnectionIndicator(connectionState, locale),
       m('.ai-chat__status-text', stateLabel),
       // 处理中显示取消按钮
       !isIdle &&
@@ -184,48 +181,12 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     ]);
   }
 
-  /**
-   * 渲染连接状态指示器
-   */
-  private renderConnectionIndicator(
-    connectionState: ConnectionState,
-    locale: 'zh' | 'en',
-  ): m.Children {
-    const statusMap: Record<string, {dotClass: string; label: string}> = {
-      connected: {
-        dotClass: 'ai-chat__connection-dot--connected',
-        label: locale === 'zh' ? '已连接' : 'Connected',
-      },
-      connecting: {
-        dotClass: 'ai-chat__connection-dot--connecting',
-        label: locale === 'zh' ? '连接中...' : 'Connecting...',
-      },
-      disconnected: {
-        dotClass: 'ai-chat__connection-dot--disconnected',
-        label: locale === 'zh' ? '未连接' : 'Disconnected',
-      },
-      error: {
-        dotClass: 'ai-chat__connection-dot--error',
-        label: locale === 'zh' ? '连接错误' : 'Connection Error',
-      },
-    };
-    const info = statusMap[connectionState.status];
-    return m('.ai-chat__connection-indicator', {title: info.label}, [
-      m('.ai-chat__connection-dot', {class: info.dotClass}),
-      m('.ai-chat__connection-label', info.label),
-    ]);
-  }
 
   /**
    * 渲染欢迎消息
    */
   private renderWelcome(locale: 'zh' | 'en'): m.Children {
     return m('.ai-chat__welcome', [
-      m('.ai-chat__welcome-icon', m(Icon, {icon: 'psychology'})),
-      m(
-        '.ai-chat__welcome-title',
-        locale === 'zh' ? 'OpenPerfetto AI 分析助手' : 'OpenPerfetto AI Assistant',
-      ),
       m(
         '.ai-chat__welcome-text',
         locale === 'zh'

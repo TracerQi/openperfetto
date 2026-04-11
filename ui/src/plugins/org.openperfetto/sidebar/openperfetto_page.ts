@@ -82,10 +82,6 @@ export class OpenPerfettoPage
         // 顶部栏
         m(TopBar, {
           store,
-          onThemeToggle: () =>
-            store.edit((draft) => {
-              draft.theme = draft.theme === 'light' ? 'dark' : 'light';
-            }),
           onCollapse: attrs.onCollapse,
         }),
 

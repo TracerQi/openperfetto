@@ -88,11 +88,54 @@ const DEFAULT_PRESET_SCENES: PresetPinScene[] = [
   },
 ];
 
+const PRESET_SCENES_KEY = 'openperfetto_preset_scenes';
+const SEARCH_HISTORY_KEY = 'openperfetto_search_history';
+
+/**
+ * 从 localStorage 加载预设场景
+ */
+function loadPresetsFromStorage(): PresetPinScene[] | null {
+  try {
+    const stored = localStorage.getItem(PRESET_SCENES_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load presets from localStorage:', error);
+  }
+  return null;
+}
+
+/**
+ * 从 localStorage 加载搜索历史
+ */
+function loadSearchHistoryFromStorage(): string[] | null {
+  try {
+    const stored = localStorage.getItem(SEARCH_HISTORY_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load search history from localStorage:', error);
+  }
+  return null;
+}
+
 /**
  * 创建默认状态
  * 替代 localStorage 初始化，确保状态结构一致性
  */
 export function createDefaultState(): OpenPerfettoState {
+  // 优先从 localStorage 恢复持久化数据
+  const presets = loadPresetsFromStorage() ?? [...DEFAULT_PRESET_SCENES];
+  const searchHistory = loadSearchHistoryFromStorage() ?? [];
+
   return {
     version: CURRENT_STATE_VERSION,
     initialized: false,
@@ -100,8 +143,8 @@ export function createDefaultState(): OpenPerfettoState {
     currentSession: null,
     theme: 'light',
     locale: 'zh',
-    presetPinScenes: [...DEFAULT_PRESET_SCENES],
-    searchHistory: [],
+    presetPinScenes: presets,
+    searchHistory,
     markers: [],
     aiPinnedTrackUris: [],
   };
@@ -211,11 +254,29 @@ export const migrateState: Migrate<OpenPerfettoState> = (
   }
 
   // 确保所有必需字段存在
-  return {
+  const result: OpenPerfettoState = {
     ...createDefaultState(),
     ...state,
     version: CURRENT_STATE_VERSION,
   };
+
+  // 如果 store 中没有预设场景，尝试从 localStorage 恢复（防止空数组覆盖持久化数据）
+  if ((!result.presetPinScenes || result.presetPinScenes.length === 0)) {
+    const storedPresets = loadPresetsFromStorage();
+    if (storedPresets) {
+      result.presetPinScenes = storedPresets;
+    }
+  }
+
+  // 如果 store 中没有搜索历史，尝试从 localStorage 恢复
+  if ((!result.searchHistory || result.searchHistory.length === 0)) {
+    const storedHistory = loadSearchHistoryFromStorage();
+    if (storedHistory) {
+      result.searchHistory = storedHistory;
+    }
+  }
+
+  return result;
 };
 
 export type ConnectionState =

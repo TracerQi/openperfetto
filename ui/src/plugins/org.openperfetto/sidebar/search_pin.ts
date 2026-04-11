@@ -156,15 +156,19 @@ export class SearchPin implements m.ClassComponent<SearchPinAttrs> {
   private matchedTrackUris: string[] = [];
   /** 当前跳转到的匹配索引 */
   private currentMatchIndex: number = -1;
+  /** store 引用（在 view 中更新，供 doSearch 等方法使用） */
+  private store: Store<OpenPerfettoState> | null = null;
 
-  oninit(): void {
-    // 从 localStorage 加载搜索历史
-    this.loadSearchHistory();
+  oninit(vnode: m.CVnode<SearchPinAttrs>): void {
+    // 从 store 的搜索历史初始化（store 已从 localStorage 恢复）
+    this.searchHistory = [...vnode.attrs.store.state.searchHistory];
   }
 
   view({attrs}: m.CVnode<SearchPinAttrs>): m.Children {
     const {trace, store, collapsed, onOpenSettingsPreset} = attrs;
     const state = store.state;
+    // 缓存 store 引用，供 doSearch 等方法使用
+    this.store = store;
 
     if (collapsed) {
       return null;
@@ -414,47 +418,39 @@ export class SearchPin implements m.ClassComponent<SearchPinAttrs> {
     onOpenSettingsPreset?: () => void,
   ): m.Children {
     const presets = store.state.presetPinScenes;
-
+  
     return m('.openperfetto-search-pin__presets', [
-      // 标题行：左侧“预设场景”文字 + 右侧“+”新建按钮
-      m('.openperfetto-search-pin__presets-header', [
-        m(Icon, {icon: 'bookmark'}),
-        m('span', t(locale, 'searchPin.presets')),
-        m('.openperfetto-search-pin__presets-spacer'),
-        m(Button, {
-          icon: 'add',
-          onclick: () => {
-            // 通知父组件打开设置页的预设场景tab
-            if (onOpenSettingsPreset) {
-              onOpenSettingsPreset();
-            }
-          },
-          title: locale === 'zh' ? '新建场景' : 'New Preset',
-          compact: true,
-          className: 'openperfetto-search-pin__presets-add-btn',
-        }),
-      ]),
+      // bookmark 图标（hover 提示"预设场景"，使用 data-tooltip 实现即时提示）
+      m(Icon, {
+        icon: 'bookmark',
+        'data-tooltip': t(locale, 'searchPin.presets'),
+        className: 'openperfetto-search-pin__presets-icon',
+      }),
       // 预设场景 chip 列表
-      m(
-        '.openperfetto-search-pin__presets-chips',
-        presets.length === 0
-          ? m(
-              '.openperfetto-search-pin__presets-empty',
-              t(locale, 'searchPin.noPresets'),
-            )
-          : presets.map((preset) =>
-              m(
-                '.openperfetto-search-pin__preset-chip',
-                {
-                  onclick: () => this.applyPreset(trace, preset, locale),
-                  title: preset.threads
-                    .map((t) => `${t.processPattern}+${t.threadPattern}`)
-                    .join(', '),
-                },
-                preset.name,
-              ),
-            ),
+      ...presets.map((preset) =>
+        m(
+          '.openperfetto-search-pin__preset-chip',
+          {
+            onclick: () => this.applyPreset(trace, preset, locale),
+            title: preset.threads
+              .map((t) => `${t.processPattern}+${t.threadPattern}`)
+              .join(', '),
+          },
+          preset.name,
+        ),
       ),
+      // 新建按钮
+      m(Button, {
+        icon: 'add',
+        onclick: () => {
+          if (onOpenSettingsPreset) {
+            onOpenSettingsPreset();
+          }
+        },
+        title: locale === 'zh' ? '新建场景' : 'New Preset',
+        compact: true,
+        className: 'openperfetto-search-pin__presets-add-btn',
+      }),
     ]);
   }
 
@@ -564,7 +560,7 @@ export class SearchPin implements m.ClassComponent<SearchPinAttrs> {
       }
 
       // 添加到搜索历史
-      this.addToHistory(query);
+      this.addToHistory(query, this.store ?? undefined);
     } catch (error) {
       console.error('Search failed:', error);
     } finally {
@@ -1054,24 +1050,11 @@ export class SearchPin implements m.ClassComponent<SearchPinAttrs> {
     return store.state.aiPinnedTrackUris.includes(trackUri);
   }
 
-  /**
-   * 加载搜索历史
-   */
-  private loadSearchHistory(): void {
-    try {
-      const stored = localStorage.getItem(SEARCH_HISTORY_KEY);
-      if (stored) {
-        this.searchHistory = JSON.parse(stored);
-      }
-    } catch (error) {
-      console.warn('Failed to load search history:', error);
-    }
-  }
 
   /**
-   * 添加到搜索历史
+   * 添加到搜索历史（同步更新组件状态、store 和 localStorage）
    */
-  private addToHistory(query: string): void {
+  private addToHistory(query: string, store?: Store<OpenPerfettoState>): void {
     // 移除重复项
     this.searchHistory = this.searchHistory.filter((h) => h !== query);
     // 添加到开头
@@ -1080,7 +1063,12 @@ export class SearchPin implements m.ClassComponent<SearchPinAttrs> {
     if (this.searchHistory.length > MAX_HISTORY_SIZE) {
       this.searchHistory = this.searchHistory.slice(0, MAX_HISTORY_SIZE);
     }
-    // 保存到 localStorage
+    // 同步到 store 和 localStorage
+    if (store) {
+      store.edit((draft) => {
+        draft.searchHistory = [...this.searchHistory];
+      });
+    }
     this.saveSearchHistory();
   }
 

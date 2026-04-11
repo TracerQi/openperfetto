@@ -44,6 +44,10 @@ let toggleButton: HTMLButtonElement | null = null;
 let sidebarWidth = 0;
 let isResizing = false;
 let mutationObserver: MutationObserver | null = null;
+// 记录当前观察的 .pf-sidebar 元素引用，用于检测 DOM 重建
+let observedSidebarEl: Element | null = null;
+// 监听 UiMain DOM 重建（trace 加载时 key 变化会销毁并新建 main.pf-ui-main）
+let mainClassObserver: MutationObserver | null = null;
 
 type TraceContext = {
   trace: Trace;
@@ -80,6 +84,47 @@ const SidebarRootComponent: m.Component = {
     });
   },
 };
+
+// ─────────────────────────────────────────────────────────────
+// 确保 pf-ui-main 上的 active class 与侧边栏状态同步
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 根据当前侧边栏状态，确保 main.pf-ui-main 上的 class 正确。
+ * 在 UiMain 因 trace 加载而被 Mithril 销毁重建后需调用此函数。
+ */
+function ensureMainClass(): void {
+  const mainEl = document.querySelector('main.pf-ui-main');
+  if (!mainEl) return;
+  if (sidebarState === 'open') {
+    mainEl.classList.add('pf-ui-main--openperfetto-active');
+  } else {
+    mainEl.classList.remove('pf-ui-main--openperfetto-active');
+  }
+}
+
+/**
+ * 设置 MutationObserver 以监听 main.pf-ui-main 的 DOM 重建。
+ * 当 Perfetto 的 UiMain 因 trace 加载（key 变化）被重建时，
+ * 自动重新应用 pf-ui-main--openperfetto-active class，防止布局重叠。
+ */
+function setupMainClassObserver(): void {
+  if (mainClassObserver) return;
+  mainClassObserver = new MutationObserver((mutations) => {
+    // 只在有新节点加入时才检查（childList only，不监听 attributes）
+    const hasAddedNodes = mutations.some(
+      (mut) => mut.type === 'childList' && mut.addedNodes.length > 0,
+    );
+    if (!hasAddedNodes) return;
+    ensureMainClass();
+    // DOM 重建可能导致 .pf-sidebar 元素被替换，重新绑定 observer
+    setupSidebarObserver();
+  });
+  mainClassObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // 宽度工具函数
@@ -153,36 +198,64 @@ function updateToggleButton(): void {
   if (sidebarState === 'open') {
     toggleButton.style.display = 'none';
     document.body.classList.remove('openperfetto-toggle-active');
+    document.body.classList.remove('pf-old-sidebar-hidden');
   } else {
     toggleButton.style.display = 'flex';
     document.body.classList.add('openperfetto-toggle-active');
     toggleButton.style.top = '6px';
+    // 清除可能残留的行内 left 样式，交由 CSS 基于变量计算
+    toggleButton.style.left = '';
 
+    // 根据旧侧边栏状态切换 body class，CSS 负责定位
     const pfSidebar = document.querySelector('.pf-sidebar');
-    const isOldVisible =
+    const isOldHidden =
       pfSidebar != null &&
-      !pfSidebar.classList.contains('pf-sidebar--hidden');
+      pfSidebar.classList.contains('pf-sidebar--hidden');
 
-    if (isOldVisible) {
-      // 旧侧边栏展开：从 CSS 变量直接计算最终位置，避免依赖动画中间帧的 getBoundingClientRect()
-      // --sidebar-width 定义在 :root，直接从 documentElement 读取
-      const rawWidth = getComputedStyle(document.documentElement)
-        .getPropertyValue('--sidebar-width')
-        .trim();
-      const parsedWidth = parseInt(rawWidth, 10);
-      const finalWidth = isNaN(parsedWidth) ? 256 : parsedWidth;
-      // 菜单按钮 left = sidebarWidth - 44px（参见 sidebar.scss line 197）
-      // toggle 按钮放在菜单按钮左侧：menuBtnLeft - 36（按钮宽32 + 间距4）
-      const menuBtnLeft = finalWidth - 44;
-      toggleButton.style.left = `${menuBtnLeft - 36}px`;
+    if (isOldHidden) {
+      document.body.classList.add('pf-old-sidebar-hidden');
     } else {
-      // 旧侧边栏折叠：放在左侧边缘，菜单按钮会被 CSS 右移
-      toggleButton.style.left = '10px';
+      document.body.classList.remove('pf-old-sidebar-hidden');
     }
   }
 }
 
-// syncMarkerRegistry 已移至 ./sidebar/marker_registry.ts 以避免循环依赖
+/**
+ * 设置 MutationObserver：监听 .pf-sidebar 的 class 变化，
+ * 当旧侧边栏折叠/展开时，触发 updateToggleButton() 同步新侧边栏按钮位置。
+ *
+ * 关键：此函数需在 DOM 可能重建后重新调用（如 trace 加载），
+ * 因为 Mithril 重新渲染会销毁旧的 .pf-sidebar 元素，导致 observer 失效。
+ */
+function setupSidebarObserver(): void {
+  const pfSidebar = document.querySelector('.pf-sidebar');
+  if (!pfSidebar) return;
+
+  // 已经在观察同一个仍存在于 DOM 中的元素 → 跳过
+  if (
+    pfSidebar === observedSidebarEl &&
+    mutationObserver &&
+    document.body.contains(observedSidebarEl)
+  ) {
+    return;
+  }
+
+  // 断开旧 observer
+  if (mutationObserver) {
+    mutationObserver.disconnect();
+    mutationObserver = null;
+  }
+
+  observedSidebarEl = pfSidebar;
+  mutationObserver = new MutationObserver(() => updateToggleButton());
+  mutationObserver.observe(pfSidebar, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+
+  // 立即同步一次按钮位置（防止遗漏中间状态变化）
+  updateToggleButton();
+}
 
 /**
  * 处理快捷键 E 标记逻辑
@@ -498,22 +571,13 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
       updateToggleButton();
     });
 
-    // 延迟到首次渲染后，应用 active class 并设置 MutationObserver
-    setTimeout(() => {
-      document
-        .querySelector('.pf-ui-main')
-        ?.classList.add('pf-ui-main--openperfetto-active');
-      updateToggleButton();
+    // 设置 MutationObserver：监听 UiMain DOM 重建，确保 active class 持续同步
+    setupMainClassObserver();
 
-      // 监听旧侧边栏可见性变化，动态更新 toggle 按钮位置
-      const pfSidebar = document.querySelector('.pf-sidebar');
-      if (pfSidebar) {
-        mutationObserver = new MutationObserver(() => updateToggleButton());
-        mutationObserver.observe(pfSidebar, {
-          attributes: true,
-          attributeFilter: ['class'],
-        });
-      }
+    // 延迟到首次渲染后，应用 active class 并设置侧边栏 observer
+    setTimeout(() => {
+      ensureMainClass();
+      setupSidebarObserver();
     }, 0);
 
     console.log(`${OpenPerfettoPlugin.id}::onActivate()`);
@@ -605,6 +669,11 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
       // 启动 AI Pin badge 注入（延迟确保 DOM 已渲染）
       this.setupAIPinBadgeObserver();
     });
+
+    // 9. Trace 加载后 DOM 可能重建，重新绑定侧边栏 observer 并同步按钮位置
+    setTimeout(() => {
+      setupSidebarObserver();
+    }, 0);
   }
 
   /**
