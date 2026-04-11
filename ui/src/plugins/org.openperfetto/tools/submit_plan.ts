@@ -24,7 +24,6 @@
 import {ITool, ToolDefinition, ToolExecutionResult} from './tool_registry';
 import {AnalysisPlan, AnalysisPhase} from '../types/agent';
 import {SceneType} from '../types/plugin_state';
-import {PlanningGate} from '../agent/planning_gate';
 
 export class SubmitPlanTool implements ITool {
   readonly definition: ToolDefinition = {
@@ -119,17 +118,8 @@ Example plan structure:
       submittedAt: Date.now(),
     };
 
-    // 验证计划
-    const planningGate = new PlanningGate();
-    const validation = planningGate.validatePlan(plan);
-
-    if (!validation.valid) {
-      return {
-        success: false,
-        error: `Plan validation failed:\n${validation.issues.join('\n')}`,
-        executionTimeMs: performance.now() - startTime,
-      };
-    }
+    // 计划验证由 AgentLoop 的 PlanningGate 统一处理
+    // 此处不再双重验证，避免与 AgentLoop 行为不一致
 
     return {
       success: true,

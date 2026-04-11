@@ -102,6 +102,7 @@ export class WebSocketClient {
       return;
     }
 
+    opLogger.info('[WS] Connecting...', {url: this.url});
     this.updateState({status: 'connecting'});
 
     try {
@@ -118,6 +119,7 @@ export class WebSocketClient {
    * 断开连接
    */
   disconnect(): void {
+    opLogger.info('[WS] Disconnecting');
     this.stopHeartbeat();
     this.cancelReconnect();
 
@@ -137,10 +139,16 @@ export class WebSocketClient {
   send(message: WebSocketMessage): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(JSON.stringify(message));
+        const serialized = JSON.stringify(message);
+        opLogger.info('[WS] >>> Send message', {
+          type: message.type,
+          size: serialized.length,
+          traceId: message.traceId,
+        });
+        this.ws.send(serialized);
         return true;
       } catch (error) {
-        opLogger.error('Failed to send WebSocket message:', error);
+        opLogger.error('[WS] Failed to send WebSocket message:', error);
         return false;
       }
     }
@@ -194,7 +202,7 @@ export class WebSocketClient {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
-      opLogger.info('WebSocket connected', this.url);
+      opLogger.info('[WS] <<< Connected', {url: this.url});
       this.updateState({status: 'connected', agentId: this.generateAgentId()});
       this.startHeartbeat();
       this.flushPendingMessages();
@@ -202,7 +210,7 @@ export class WebSocketClient {
 
     this.ws.onclose = (event) => {
       this.stopHeartbeat();
-      opLogger.info('WebSocket closed', {code: event.code, wasClean: event.wasClean});
+      opLogger.info('[WS] <<< Closed', {code: event.code, wasClean: event.wasClean});
       if (event.wasClean) {
         this.updateState({status: 'disconnected'});
       } else {
@@ -223,6 +231,12 @@ export class WebSocketClient {
       try {
         const rawMessage = JSON.parse(event.data) as WebSocketMessage;
 
+        opLogger.debug('[WS] <<< Raw message received', {
+          type: rawMessage.type,
+          hasPayload: !!rawMessage.payload,
+          hasData: !!rawMessage.data,
+        });
+
         // 将后端的 data 字段映射为 payload（兼容处理）
         const message: WebSocketMessage = {
           ...rawMessage,
@@ -231,19 +245,25 @@ export class WebSocketClient {
 
         // 处理 pong 响应
         if (message.type === 'pong') {
+          opLogger.debug('[WS] <<< Pong received');
           return;
         }
+
+        opLogger.info('[WS] <<< Message dispatched to callbacks', {
+          type: message.type,
+          payloadKeys: message.payload ? Object.keys(message.payload as object) : [],
+        });
 
         // 通知所有消息回调
         this.messageCallbacks.forEach((callback) => {
           try {
             callback(message);
           } catch (error) {
-            opLogger.error('Error in message callback:', error);
+            opLogger.error('[WS] Error in message callback:', error);
           }
         });
       } catch (error) {
-        opLogger.error('Failed to parse WebSocket message:', error);
+        opLogger.error('[WS] Failed to parse WebSocket message:', error);
       }
     };
   }
@@ -270,7 +290,7 @@ export class WebSocketClient {
 
     this.reconnectAttempts++;
 
-    opLogger.info('WebSocket reconnecting', {attempt: this.reconnectAttempts, delayMs: delay});
+    opLogger.info('[WS] Reconnecting', {attempt: this.reconnectAttempts, delayMs: delay});
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();

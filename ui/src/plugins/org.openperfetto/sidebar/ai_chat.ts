@@ -21,6 +21,7 @@ import {AgentLoop, AgentLoopState} from '../agent/agent_loop';
 // t() function will be used when i18n is implemented
 import {t as _t} from '../i18n';
 import {Icon} from '../../../widgets/icon';
+import {opLogger} from '../utils/logger';
 
 /**
  * AIChat 组件属性
@@ -464,6 +465,7 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
     // 检查连接状态
     const connectionState = store.state.connectionState;
     if (connectionState.status !== 'connected') {
+      opLogger.warn('[AIChat] Cannot send: not connected', {status: connectionState.status});
       store.edit((draft) => {
         if (draft.currentSession) {
           draft.currentSession.messages.push({
@@ -486,16 +488,25 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
       agentState !== AgentLoopState.ERROR &&
       agentState !== AgentLoopState.CANCELLED
     ) {
+      opLogger.warn('[AIChat] Cannot send: agent busy', {state: agentState});
       return;
     }
+
+    opLogger.info('[AIChat] >>> User sending message', {
+      length: text.length,
+      preview: text.substring(0, 80),
+      agentState,
+      connectionStatus: connectionState.status,
+    });
 
     this.inputText = '';
     this.shouldScrollToBottom = true;
 
     try {
       await agentLoop.sendMessage(text);
+      opLogger.info('[AIChat] Message sent successfully');
     } catch (error) {
-      console.error('Failed to send message:', error);
+      opLogger.error('[AIChat] Failed to send message', error);
       // 添加错误消息到对话中
       store.edit((draft) => {
         if (draft.currentSession) {

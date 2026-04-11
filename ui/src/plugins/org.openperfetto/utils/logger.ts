@@ -12,29 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {featureFlags} from '../../../core/feature_flags';
+
 /**
- * OpenPerfetto 统一日志工具
+ * OpenPerfetto 调试日志 Feature Flag
  *
- * 使用特性开关控制调试日志输出，生产环境默认关闭。
+ * 通过 Feature Flag 系统控制，可在浏览器设置页面或命令行动态开关。
+ * 默认关闭，生产环境不输出调试日志。
  *
- * 开启调试日志（浏览器控制台）：
- *   localStorage.setItem('openperfetto.debug', 'true')
- *   // 或
- *   window.__openperfettoDebug = true
+ * 开启方式（任选其一）：
+ *   1. 浏览器控制台 → Flags 页面 → 搜索 "openperfettoDebugLogging" → 开启
+ *   2. localStorage.setItem('openperfetto.debug', 'true')
+ *   3. window.__openperfettoDebug = true
  *
  * 关闭调试日志：
- *   localStorage.removeItem('openperfetto.debug')
+ *   1. Flags 页面关闭
+ *   2. localStorage.removeItem('openperfetto.debug')
  *
  * warn / error 级别的日志无论开关状态都会输出。
  */
+export const OPENPERFETTO_DEBUG_LOGGING_FLAG = featureFlags.register({
+  id: 'openperfettoDebugLogging',
+  name: 'OpenPerfetto Debug Logging',
+  description:
+    'Enable debug/info logging for OpenPerfetto AI agent workflow. ' +
+    'Shows state transitions, tool calls, LLM messages in browser console.',
+  defaultValue: false,
+  devOnly: true,
+});
 
 const LOG_PREFIX = '[OpenPerfetto]';
 
 /**
  * 检查调试日志是否开启
- * 通过 localStorage 或全局变量控制，不污染生产日志
+ * 优先级：Feature Flag > localStorage > 全局变量
  */
 function isDebugEnabled(): boolean {
+  // 1. Feature Flag 控制（最高优先级）
+  if (OPENPERFETTO_DEBUG_LOGGING_FLAG.get()) {
+    return true;
+  }
+  // 2. 向后兼容：localStorage / 全局变量
   try {
     return (
       localStorage.getItem('openperfetto.debug') === 'true' ||

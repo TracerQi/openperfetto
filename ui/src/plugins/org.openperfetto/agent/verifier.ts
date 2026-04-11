@@ -934,7 +934,7 @@ export class Verifier {
    * 检查是否执行了计划中的阶段
    * 返回硬性问题（影响 passed）和软警告（successCriteria 相关）
    */
-  runL2Validation(plan: AnalysisPlan, messages: ChatMessage[]): L2ValidationResult {
+  runL2Validation(plan: AnalysisPlan, messages: ChatMessage[], progressRatio?: number): L2ValidationResult {
     const hardIssues: string[] = [];
     const softWarnings: string[] = [];
 
@@ -942,12 +942,14 @@ export class Verifier {
       return {hardIssues, softWarnings}; // 没有计划，不检查
     }
 
+    const ratio = progressRatio ?? 1.0;
+
     // 获取已执行的工具调用
     const executedTools = new Set(
       getToolCalls(messages).map((tc) => tc.name.toLowerCase()),
     );
 
-    // 检查每个阶段（硬性问题：阶段未执行、工具未调用）
+    // 检查每个阶段（进度不足时降级为软警告，避免早期必然失败）
     for (const phase of plan.phases) {
       // 检查是否有必需工具未执行
       const missingTools = phase.requiredTools.filter(
@@ -955,9 +957,16 @@ export class Verifier {
       );
 
       if (missingTools.length > 0) {
-        hardIssues.push(
-          `[L2:tool_missing] 计划阶段 "${phase.name}" 中的工具未执行: ${missingTools.join(', ')}`,
-        );
+        // 进度不足50%时，降级为软警告
+        if (ratio < 0.5) {
+          softWarnings.push(
+            `[L2:soft] 计划阶段 "${phase.name}" 中的工具尚未执行: ${missingTools.join(', ')} (分析进行中)`,
+          );
+        } else {
+          hardIssues.push(
+            `[L2:tool_missing] 计划阶段 "${phase.name}" 中的工具未执行: ${missingTools.join(', ')}`,
+          );
+        }
       }
     }
 
@@ -1027,13 +1036,14 @@ export class Verifier {
     messages: ChatMessage[],
     artifacts: Artifact[],
     plan: AnalysisPlan | null,
+    progressRatio?: number,
   ): Promise<VerificationResult> {
     // L1 验证
     const l1Issues = this.runL1Validation(messages, artifacts);
 
     // L2 验证（区分硬性问题和软警告）
     const l2Result = plan
-      ? this.runL2Validation(plan, messages)
+      ? this.runL2Validation(plan, messages, progressRatio)
       : {hardIssues: [], softWarnings: []};
 
     // L3 验证（可选）

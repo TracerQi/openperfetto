@@ -59,6 +59,35 @@ export class PlanningGate {
     ['general', ['data_collection', 'pattern_identification', 'root_cause']],
   ]);
 
+  /** 场景必需阶段的语义别名映射 */
+  private phaseAliases: Map<string, string[]> = new Map([
+    ['process_creation', ['fork', 'process_start', 'process_info', 'target_app', 'identify_app', 'app_identify']],
+    ['initialization', ['init', 'startup_phase', 'cold_startup', 'startup_analysis', 'app_init', 'bindApplication']],
+    ['first_frame', ['first_draw', 'ttfd', 'ttid', 'frame_render', 'rendering', 'first_frame_draw']],
+    ['root_cause', ['root_cause_analysis', 'cause', 'conclusion', 'final_analysis', 'diagnosis']],
+    ['frame_analysis', ['frame_timeline', 'jank_detection', 'frame_inspection']],
+    ['blocking_identification', ['blocking_detection', 'blocking_call', 'blocking_analysis', 'main_thread_blocking']],
+    ['jank_detection', ['jank_frame', 'frame_jank', 'detect_jank']],
+    ['activity_resume', ['resume', 'onResume', 'activity_start']],
+    ['view_binding', ['view_create', 'layout_inflate', 'view_init']],
+    ['bring_to_front', ['foreground', 'move_front', 'resume_activity']],
+    ['blocking_detection', ['block_detect', 'main_block', 'ui_block']],
+    ['stack_analysis', ['call_stack', 'stack_trace', 'trace_stack']],
+    ['resource_contention', ['contention', 'lock_wait', 'resource_wait']],
+    ['contention_detection', ['lock_contention_detect', 'contention_find']],
+    ['holder_identification', ['lock_holder', 'holder_find', 'owner_thread']],
+    ['transaction_analysis', ['binder_trans', 'transaction_trace']],
+    ['server_delay', ['service_delay', 'binder_delay', 'server_slow']],
+    ['io_detection', ['io_find', 'disk_detect', 'io_issue']],
+    ['main_thread_io', ['ui_io', 'main_disk', 'main_read_write']],
+    ['cpu_analysis', ['cpu_usage', 'cpu_load', 'cpu_profile']],
+    ['hotspot_detection', ['hotspot', 'bottleneck', 'cpu_hot']],
+    ['state_transition', ['power_state', 'screen_transition']],
+    ['keyguard_dismiss', ['lock_screen', 'keyguard_exit']],
+    ['data_collection', ['collect', 'query_data', 'fetch_data']],
+    ['pattern_identification', ['pattern_find', 'anomaly_detect', 'identify_pattern']],
+  ]);
+
   /**
    * 验证分析计划的完整性
    */
@@ -96,13 +125,7 @@ export class PlanningGate {
     // 检查是否至少匹配了必需阶段的一半
     let matchedCount = 0;
     for (const required of requiredPhases) {
-      const found =
-        phaseIds.some(
-          (id) => id.includes(required) || required.includes(id),
-        ) ||
-        phaseNames.some(
-          (name) => name.includes(required) || required.includes(name),
-        );
+      const found = this.matchesRequiredPhase(phaseIds, phaseNames, required);
       if (found) {
         matchedCount++;
       }
@@ -119,6 +142,38 @@ export class PlanningGate {
       valid: issues.length === 0,
       issues,
     };
+  }
+
+  /**
+   * 检查必需阶段是否被计划中的某个阶段匹配
+   * 支持字面匹配和语义别名匹配
+   */
+  private matchesRequiredPhase(
+    phaseIds: string[],
+    phaseNames: string[],
+    required: string,
+  ): boolean {
+    // 1. 字面匹配
+    const literalMatch =
+      phaseIds.some(
+        (id) => id.includes(required) || required.includes(id),
+      ) ||
+      phaseNames.some(
+        (name) => name.includes(required) || required.includes(name),
+      );
+    if (literalMatch) return true;
+
+    // 2. 语义别名匹配
+    const aliases = this.phaseAliases.get(required) || [];
+    return aliases.some(
+      (alias) =>
+        phaseIds.some(
+          (id) => id.includes(alias) || alias.includes(id),
+        ) ||
+        phaseNames.some(
+          (name) => name.includes(alias) || alias.includes(name),
+        ),
+    );
   }
 
   /**
