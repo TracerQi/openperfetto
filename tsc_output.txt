@@ -1,0 +1,282 @@
+﻿[96msrc/base/logging.ts[0m:[93m15[0m:[93m23[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/perfetto_version' or its corresponding type declarations.
+
+[7m15[0m import {VERSION} from '../gen/perfetto_version';
+[7m  [0m [91m                      ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/base/proto_utils_wasm.ts[0m:[93m20[0m:[93m27[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/proto_utils' or its corresponding type declarations.
+
+[7m20[0m import WasmModuleGen from '../gen/proto_utils';
+[7m  [0m [91m                          ~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/chrome_extension/chrome_tracing_controller.ts[0m:[93m195[0m:[93m7[0m - [91merror[0m[90m TS2353: [0mObject literal may only specify known properties, and 'slices' does not exist in type 'Typed'.
+
+[7m195[0m       slices: [{data: chunk as {} as Uint8Array, lastSliceForPacket: res.eof}],
+[7m   [0m [91m      ~~~~~~[0m
+
+[96msrc/chrome_extension/chrome_tracing_controller.ts[0m:[93m227[0m:[93m7[0m - [91merror[0m[90m TS2353: [0mObject literal may only specify known properties, and 'traceStats' does not exist in type 'Typed'.
+
+[7m227[0m       traceStats: stats,
+[7m   [0m [91m      ~~~~~~~~~~[0m
+
+[96msrc/core/analytics_impl.ts[0m:[93m17[0m:[93m23[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/perfetto_version' or its corresponding type declarations.
+
+[7m17[0m import {VERSION} from '../gen/perfetto_version';
+[7m  [0m [91m                      ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/engine/wasm_bridge.ts[0m:[93m20[0m:[93m30[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/trace_processor_memory64' or its corresponding type declarations.
+
+[7m20[0m import TraceProcessor64 from '../gen/trace_processor_memory64';
+[7m  [0m [91m                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/frontend/error_dialog.ts[0m:[93m19[0m:[93m23[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/perfetto_version' or its corresponding type declarations.
+
+[7m19[0m import {VERSION} from '../gen/perfetto_version';
+[7m  [0m [91m                      ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/frontend/index.ts[0m:[93m19[0m:[93m30[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/all_plugins' or its corresponding type declarations.
+
+[7m19[0m import NON_CORE_PLUGINS from '../gen/all_plugins';
+[7m  [0m [91m                             ~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/frontend/index.ts[0m:[93m20[0m:[93m26[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/all_core_plugins' or its corresponding type declarations.
+
+[7m20[0m import CORE_PLUGINS from '../gen/all_core_plugins';
+[7m  [0m [91m                         ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/frontend/index.ts[0m:[93m481[0m:[93m25[0m - [91merror[0m[90m TS7006: [0mParameter 'p' implicitly has an 'any' type.
+
+[7m481[0m   CORE_PLUGINS.forEach((p) => pluginManager.registerPlugin(p, true));
+[7m   [0m [91m                        ~[0m
+
+[96msrc/frontend/index.ts[0m:[93m482[0m:[93m29[0m - [91merror[0m[90m TS7006: [0mParameter 'p' implicitly has an 'any' type.
+
+[7m482[0m   NON_CORE_PLUGINS.forEach((p) => pluginManager.registerPlugin(p, false));
+[7m   [0m [91m                            ~[0m
+
+[96msrc/frontend/rpc_http_dialog.ts[0m:[93m18[0m:[93m23[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/perfetto_version' or its corresponding type declarations.
+
+[7m18[0m import {VERSION} from '../gen/perfetto_version';
+[7m  [0m [91m                      ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/frontend/sidebar.ts[0m:[93m28[0m:[93m37[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/perfetto_version' or its corresponding type declarations.
+
+[7m28[0m import {SCM_REVISION, VERSION} from '../gen/perfetto_version';
+[7m  [0m [91m                                    ~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/json_handler_unittest.ts[0m:[93m1681[0m:[93m36[0m - [91merror[0m[90m TS7006: [0mParameter 'c' implicitly has an 'any' type.
+
+[7m1681[0m     expect(sq?.selectColumns?.map((c) => c.columnNameOrExpression)).toEqual(
+[7m    [0m [91m                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m535[0m:[93m33[0m - [91merror[0m[90m TS7006: [0mParameter 'q' implicitly has an 'any' type.
+
+[7m535[0m             ...secondaries.map((q, i) => ({
+[7m   [0m [91m                                ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m535[0m:[93m36[0m - [91merror[0m[90m TS7006: [0mParameter 'i' implicitly has an 'any' type.
+
+[7m535[0m             ...secondaries.map((q, i) => ({
+[7m   [0m [91m                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m561[0m:[93m32[0m - [91merror[0m[90m TS7006: [0mParameter 'q' implicitly has an 'any' type.
+
+[7m561[0m           inputs: queries.map((q, i) => ({
+[7m   [0m [91m                               ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m561[0m:[93m35[0m - [91merror[0m[90m TS7006: [0mParameter 'i' implicitly has an 'any' type.
+
+[7m561[0m           inputs: queries.map((q, i) => ({
+[7m   [0m [91m                                  ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m888[0m:[93m6[0m - [91merror[0m[90m TS7006: [0mParameter 'sc' implicitly has an 'any' type.
+
+[7m888[0m     (sc) => sc.columnNameOrExpression ?? sc.columnName ?? sc.alias ?? '',
+[7m   [0m [91m     ~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m1184[0m:[93m59[0m - [91merror[0m[90m TS7006: [0mParameter 'name' implicitly has an 'any' type.
+
+[7m1184[0m   const groupByColumns = (groupBy.columnNames ?? []).map((name) => ({
+[7m    [0m [91m                                                          ~~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m1189[0m:[93m56[0m - [91merror[0m[90m TS7006: [0mParameter 'agg' implicitly has an 'any' type.
+
+[7m1189[0m   const aggregations = (groupBy.aggregates ?? []).map((agg) => ({
+[7m    [0m [91m                                                       ~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[0m:[93m1239[0m:[93m59[0m - [91merror[0m[90m TS7006: [0mParameter 'spec' implicitly has an 'any' type.
+
+[7m1239[0m   const sortCriteria = (orderBy.orderingSpecs ?? []).map((spec) => ({
+[7m    [0m [91m                                                          ~~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m111[0m:[93m15[0m - [91merror[0m[90m TS7006: [0mParameter 'col' implicitly has an 'any' type.
+
+[7m111[0m         .map((col) => col.alias)
+[7m   [0m [91m              ~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m112[0m:[93m18[0m - [91merror[0m[90m TS7006: [0mParameter 'a' implicitly has an 'any' type.
+
+[7m112[0m         .filter((a): a is string => a !== undefined);
+[7m   [0m [91m                 ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m164[0m:[93m15[0m - [91merror[0m[90m TS7006: [0mParameter 'col' implicitly has an 'any' type.
+
+[7m164[0m         .map((col) => col.alias)
+[7m   [0m [91m              ~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m165[0m:[93m18[0m - [91merror[0m[90m TS7006: [0mParameter 'a' implicitly has an 'any' type.
+
+[7m165[0m         .filter((a): a is string => !!a && a.trim() !== '');
+[7m   [0m [91m                 ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m210[0m:[93m15[0m - [91merror[0m[90m TS7006: [0mParameter 'col' implicitly has an 'any' type.
+
+[7m210[0m         .map((col) => col.alias)
+[7m   [0m [91m              ~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[0m:[93m211[0m:[93m18[0m - [91merror[0m[90m TS7006: [0mParameter 'a' implicitly has an 'any' type.
+
+[7m211[0m         .filter((a): a is string => a !== undefined);
+[7m   [0m [91m                 ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/join_node_unittest.ts[0m:[93m788[0m:[93m10[0m - [91merror[0m[90m TS7006: [0mParameter 'c' implicitly has an 'any' type.
+
+[7m788[0m         (c) => c.columnNameOrExpression,
+[7m   [0m [91m         ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m562[0m:[93m52[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m562[0m       const dimNames = spec!.dimensionsSpecs?.map((d) => d.name);
+[7m   [0m [91m                                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m592[0m:[93m52[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m592[0m       const dimNames = spec!.dimensionsSpecs?.map((d) => d.name);
+[7m   [0m [91m                                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m623[0m:[93m10[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m623[0m         (d) => d.name === 'bucket',
+[7m   [0m [91m         ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m635[0m:[93m53[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m635[0m       const procSpec = spec!.dimensionsSpecs?.find((d) => d.name === 'proc');
+[7m   [0m [91m                                                    ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m1168[0m:[93m52[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m1168[0m       const dimNames = spec?.dimensionsSpecs?.map((d) => d.name);
+[7m    [0m [91m                                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[0m:[93m1196[0m:[93m52[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m1196[0m       const dimNames = spec?.dimensionsSpecs?.map((d) => d.name);
+[7m    [0m [91m                                                   ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/sources/sql_source_unittest.ts[0m:[93m165[0m:[93m51[0m - [91merror[0m[90m TS7006: [0mParameter 'd' implicitly has an 'any' type.
+
+[7m165[0m       const aliases = sq?.sql?.dependencies?.map((d) => d.alias);
+[7m   [0m [91m                                                  ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/trace_summary_node_unittest.ts[0m:[93m185[0m:[93m55[0m - [91merror[0m[90m TS7006: [0mParameter 's' implicitly has an 'any' type.
+
+[7m185[0m       const prefixes = spec?.metricTemplateSpec?.map((s) => s.idPrefix);
+[7m   [0m [91m                                                      ~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/trace_summary_results_panel.ts[0m:[93m71[0m:[93m13[0m - [91merror[0m[90m TS7006: [0mParameter 'ds' implicitly has an 'any' type.
+
+[7m71[0m       .map((ds) => ds.name)
+[7m  [0m [91m            ~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/trace_summary_results_panel.ts[0m:[93m72[0m:[93m16[0m - [91merror[0m[90m TS7006: [0mParameter 'name' implicitly has an 'any' type.
+
+[7m72[0m       .filter((name): name is string => name !== null && name !== undefined);
+[7m  [0m [91m               ~~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/nodes/union_node_unittest.ts[0m:[93m581[0m:[93m25[0m - [91merror[0m[90m TS7006: [0mParameter 'query' implicitly has an 'any' type.
+
+[7m581[0m       queries?.forEach((query) => {
+[7m   [0m [91m                        ~~~~~[0m
+
+[96msrc/plugins/dev.perfetto.DataExplorer/query_builder/query_execution_service.ts[0m:[93m149[0m:[93m8[0m - [91merror[0m[90m TS7006: [0mParameter 'q' implicitly has an 'any' type.
+
+[7m149[0m       (q) => q.queryId !== undefined && q.queryId === node.nodeId,
+[7m   [0m [91m       ~[0m
+
+[96msrc/plugins/dev.perfetto.MetricsPage/metrics_page.ts[0m:[93m227[0m:[93m13[0m - [91merror[0m[90m TS7006: [0mParameter 'ds' implicitly has an 'any' type.
+
+[7m227[0m       .map((ds) => ds.name)
+[7m   [0m [91m            ~~[0m
+
+[96msrc/plugins/dev.perfetto.MetricsPage/metrics_page.ts[0m:[93m228[0m:[93m16[0m - [91merror[0m[90m TS7006: [0mParameter 'name' implicitly has an 'any' type.
+
+[7m228[0m       .filter((name): name is string => name !== null && name !== undefined);
+[7m   [0m [91m               ~~~~[0m
+
+[96msrc/plugins/dev.perfetto.MetricsPage/metrics_page.ts[0m:[93m249[0m:[93m13[0m - [91merror[0m[90m TS7006: [0mParameter 's' implicitly has an 'any' type.
+
+[7m249[0m       .map((s) => s.value)
+[7m   [0m [91m            ~[0m
+
+[96msrc/plugins/dev.perfetto.MetricsPage/metrics_page.ts[0m:[93m250[0m:[93m16[0m - [91merror[0m[90m TS7006: [0mParameter 'v' implicitly has an 'any' type.
+
+[7m250[0m       .filter((v): v is string => v !== null && v !== undefined);
+[7m   [0m [91m               ~[0m
+
+[96msrc/plugins/dev.perfetto.RecordTraceV2/pages/chrome.ts[0m:[93m295[0m:[93m27[0m - [91merror[0m[90m TS7006: [0mParameter 'cat' implicitly has an 'any' type.
+
+[7m295[0m             cat.tags.map((cat) => {
+[7m   [0m [91m                          ~~~[0m
+
+[96msrc/plugins/dev.perfetto.RecordTraceV2/pages/chrome.ts[0m:[93m312[0m:[93m30[0m - [91merror[0m[90m TS2345: [0mArgument of type 'unknown' is not assignable to parameter of type 'string'.
+
+[7m312[0m         if (this.tagsMap.has(tag)) {
+[7m   [0m [91m                             ~~~[0m
+
+[96msrc/plugins/dev.perfetto.RecordTraceV2/pages/chrome.ts[0m:[93m313[0m:[93m28[0m - [91merror[0m[90m TS2345: [0mArgument of type 'unknown' is not assignable to parameter of type 'string'.
+
+[7m313[0m           this.tagsMap.get(tag)?.push(option);
+[7m   [0m [91m                           ~~~[0m
+
+[96msrc/plugins/dev.perfetto.RecordTraceV2/pages/chrome.ts[0m:[93m315[0m:[93m28[0m - [91merror[0m[90m TS2345: [0mArgument of type 'unknown' is not assignable to parameter of type 'string'.
+
+[7m315[0m           this.tagsMap.set(tag, [option]);
+[7m   [0m [91m                           ~~~[0m
+
+[96msrc/protos/index.ts[0m:[93m23[0m:[93m20[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/protos' or its corresponding type declarations.
+
+[7m23[0m import protos from '../gen/protos';
+[7m  [0m [91m                   ~~~~~~~~~~~~~~~[0m
+
+[96msrc/traceconv/index.ts[0m:[93m19[0m:[93m23[0m - [91merror[0m[90m TS2307: [0mCannot find module '../gen/traceconv' or its corresponding type declarations.
+
+[7m19[0m import traceconv from '../gen/traceconv';
+[7m  [0m [91m                      ~~~~~~~~~~~~~~~~~~[0m
+
+
+Found 51 errors in 23 files.
+
+Errors  Files
+     1  src/base/logging.ts[90m:15[0m
+     1  src/base/proto_utils_wasm.ts[90m:20[0m
+     2  src/chrome_extension/chrome_tracing_controller.ts[90m:195[0m
+     1  src/core/analytics_impl.ts[90m:17[0m
+     1  src/engine/wasm_bridge.ts[90m:20[0m
+     1  src/frontend/error_dialog.ts[90m:19[0m
+     4  src/frontend/index.ts[90m:19[0m
+     1  src/frontend/rpc_http_dialog.ts[90m:18[0m
+     1  src/frontend/sidebar.ts[90m:28[0m
+     1  src/plugins/dev.perfetto.DataExplorer/json_handler_unittest.ts[90m:1681[0m
+     8  src/plugins/dev.perfetto.DataExplorer/pbtxt_import.ts[90m:535[0m
+     6  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/add_columns_node_unittest.ts[90m:111[0m
+     1  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/join_node_unittest.ts[90m:788[0m
+     6  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/metrics_node_unittest.ts[90m:562[0m
+     1  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/sources/sql_source_unittest.ts[90m:165[0m
+     1  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/trace_summary_node_unittest.ts[90m:185[0m
+     2  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/trace_summary_results_panel.ts[90m:71[0m
+     1  src/plugins/dev.perfetto.DataExplorer/query_builder/nodes/union_node_unittest.ts[90m:581[0m
+     1  src/plugins/dev.perfetto.DataExplorer/query_builder/query_execution_service.ts[90m:149[0m
+     4  src/plugins/dev.perfetto.MetricsPage/metrics_page.ts[90m:227[0m
+     4  src/plugins/dev.perfetto.RecordTraceV2/pages/chrome.ts[90m:295[0m
+     1  src/protos/index.ts[90m:23[0m
+     1  src/traceconv/index.ts[90m:19[0m

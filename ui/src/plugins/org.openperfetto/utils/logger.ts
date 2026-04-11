@@ -84,6 +84,16 @@ export const opLogger = {
   },
 
   /**
+   * 通知级别日志 — 始终输出（用于关键流程节点，如状态转换、LLM 交互）
+   *
+   * 与 warn 的区别：notice 表示正常但重要的流程信息，warn 表示预期外的降级行为。
+   * 适用场景：状态机转换、LLM 请求/响应完成、分析开始/结束等关键节点。
+   */
+  notice(msg: string, ...args: unknown[]): void {
+    console.info(`${LOG_PREFIX}[notice] ${msg}`, ...args);
+  },
+
+  /**
    * 警告级别日志 — 始终输出（用于预期外的降级行为）
    */
   warn(msg: string, ...args: unknown[]): void {

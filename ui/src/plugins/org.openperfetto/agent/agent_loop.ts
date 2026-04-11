@@ -160,6 +160,7 @@ export class AgentLoop {
   // 验证器
   private verifier: Verifier;
   private verificationRetries = 0;
+  private zeroToolCallRetries = 0;
   private static readonly MAX_VERIFICATION_RETRIES = 3;
 
   // 进度回调
@@ -167,18 +168,38 @@ export class AgentLoop {
 
   // 配置
   static readonly MAX_ITERATIONS = 20;
-  static readonly MAX_DURATION_MS = 300000; // 5分钟
+  static readonly MAX_DURATION_MS = 420000; // 7分钟（硬超时上限）
+  static readonly DURATION_WARN_LEVEL1 = 180000; // 3分钟：首次提醒
+  static readonly DURATION_WARN_LEVEL2 = 300000; // 5分钟：再次提醒
   // Reserved for Phase 3 tool execution timeout (mark as used)
   static readonly TOOL_TIMEOUT_MS = 30000;
 
-  // 工具调用去重
+  // 工具调用去重（按工具类型差异化阈值）
   private recentToolCalls: Array<{name: string; argsKey: string; timestamp: number}> = [];
   private static readonly DEDUP_WINDOW_MS = 60000; // 60秒去重窗口
-  private static readonly MAX_SAME_TOOL_CALLS = 2; // 同一工具+参数最大连续调用次数
+  private static readonly TOOL_DEDUP_LIMITS: Record<string, number> = {
+    'execute_sql': 5,        // SQL查询型：相同SQL 5次以内合理（不同SQL不会命中去重）
+    'lookup_sql_schema': 4,  // 探索型：反复查看表结构4次以内合理
+  };
+  private static readonly DEFAULT_DEDUP_LIMIT = 3; // 其他工具默认阈值
 
   // 取消处理回调
   private unsubscribeStreamHandler: (() => void) | null = null;
   private unsubscribeWsMessage: (() => void) | null = null;
+
+  // 流代次（防止旧流的残留回调影响新流）
+  private streamGeneration = 0;
+
+  // 超时提醒标志（防止同一阈值重复提醒）
+  private durationWarnLevel1Fired = false;
+  private durationWarnLevel2Fired = false;
+
+  // 计划提交后等待旧流结束的标志
+  // true: PLAN_SUBMITTED 已触发但旧流 LLM_DONE 未到达，应忽略旧流 DONE
+  private waitingForPlanStreamDone = false;
+
+  // 计划验证的软性警告，在下一次 sendToLLM 时注入系统提示引导 LLM 补全
+  private planSoftWarnings: string[] = [];
 
   constructor(
     trace: Trace,
@@ -251,7 +272,7 @@ export class AgentLoop {
     this.startTime = Date.now();
     this.toolCallCount = 0;
 
-    opLogger.info('[AgentLoop] === User message received ===', {
+    opLogger.notice('[AgentLoop] === User message received ===', {
       message: userMessage.substring(0, 100),
       messageLength: userMessage.length,
     });
@@ -306,6 +327,11 @@ export class AgentLoop {
     this.pendingToolCalls.clear();
     this.recentToolCalls = [];
     this.streamBuffer = '';
+    this.durationWarnLevel1Fired = false;
+    this.durationWarnLevel2Fired = false;
+    this.waitingForPlanStreamDone = false;
+    this.planSoftWarnings = [];
+    this.zeroToolCallRetries = 0;
     if (this.streamFlushTimer) {
       clearTimeout(this.streamFlushTimer);
       this.streamFlushTimer = null;
@@ -335,6 +361,28 @@ export class AgentLoop {
   private async transition(event: AgentLoopEvent): Promise<void> {
     // 检查超时和迭代限制
     if (this.checkLimits()) {
+      return;
+    }
+
+    // 统一处理 ERROR 事件：任何非终态状态收到错误都切换到 ERROR 状态
+    // 防止状态卡死（如 AWAITING_LLM 收到后端错误后无处理分支导致永久卡住）
+    if (event.type === 'ERROR') {
+      const errorMsg = event.error || 'Unknown error';
+      opLogger.error('[AgentLoop] ERROR event received, transitioning to ERROR state', {
+        currentState: this.state,
+        error: errorMsg,
+      });
+      this.streamHandler.stopStream();
+      this.flushStreamBuffer();
+      this.state = AgentLoopState.ERROR;
+      this.addMessage({
+        id: `error_${Date.now()}`,
+        role: 'system',
+        content: `分析错误: ${errorMsg}`,
+        timestamp: Date.now(),
+      });
+      this.updateProgress(`错误: ${errorMsg}`);
+      m.redraw();
       return;
     }
 
@@ -387,7 +435,7 @@ export class AgentLoop {
   private async handleIdleState(event: AgentLoopEvent): Promise<void> {
     if (event.type !== 'USER_MESSAGE') return;
 
-    opLogger.info('[AgentLoop] State: IDLE → CLASSIFYING', {message: event.message?.substring(0, 80)});
+    opLogger.notice('[AgentLoop] State: IDLE → CLASSIFYING', {message: event.message?.substring(0, 80)});
     this.state = AgentLoopState.CLASSIFYING;
     this.updateProgress('场景分类中...');
     m.redraw();
@@ -397,7 +445,7 @@ export class AgentLoop {
       event.message,
       this.trace,
     );
-    opLogger.info('[AgentLoop] Scene classified', {sceneType});
+    opLogger.notice('[AgentLoop] Scene classified', {sceneType});
 
     await this.transition({type: 'SCENE_CLASSIFIED', scene: sceneType});
   }
@@ -406,7 +454,7 @@ export class AgentLoop {
     if (event.type !== 'SCENE_CLASSIFIED') return;
 
     this.currentSceneType = event.scene;
-    opLogger.info('[AgentLoop] State: CLASSIFYING → BUILDING_CONTEXT', {scene: event.scene});
+    opLogger.notice('[AgentLoop] State: CLASSIFYING → BUILDING_CONTEXT', {scene: event.scene});
     this.state = AgentLoopState.BUILDING_CONTEXT;
     this.updateProgress(`构建 ${event.scene} 场景上下文...`);
     m.redraw();
@@ -426,7 +474,7 @@ export class AgentLoop {
   ): Promise<void> {
     if (event.type !== 'CONTEXT_BUILT') return;
 
-    opLogger.info('[AgentLoop] State: BUILDING_CONTEXT → AWAITING_PLAN');
+    opLogger.notice('[AgentLoop] State: BUILDING_CONTEXT → AWAITING_PLAN');
     this.state = AgentLoopState.AWAITING_PLAN;
     this.updateProgress('等待分析计划...');
     m.redraw();
@@ -445,22 +493,33 @@ export class AgentLoop {
   private async handleAwaitingPlanState(event: AgentLoopEvent): Promise<void> {
     switch (event.type) {
       case 'PLAN_SUBMITTED':
+        // 先刷新流式缓冲区，确保 AI 文本在系统消息之前渲染到 UI
+        // 避免双重防抖（LLMStreamHandler 100ms + AgentLoop 100ms）导致系统消息插入 AI 文本中间
+        this.flushStreamBuffer();
+
         this.currentPlan = event.plan;
-        opLogger.info('[AgentLoop] Plan submitted', {
+        opLogger.notice('[AgentLoop] Plan submitted', {
           phaseCount: event.plan.phases.length,
           phases: event.plan.phases.map((p) => p.name),
           sceneType: event.plan.sceneType,
         });
         // 验证计划
         const validation = this.planningGate.validatePlan(event.plan);
-        if (!validation.valid) {
-          opLogger.warn('[AgentLoop] Plan validation issues', {issues: validation.issues});
+        // 只有硬性问题（结构缺陷）才插入系统消息，软性警告仅日志记录
+        if (validation.hardIssues.length > 0) {
+          opLogger.warn('[AgentLoop] Plan validation hard issues', {issues: validation.hardIssues});
           this.addMessage({
             id: `system_${Date.now()}`,
             role: 'system',
-            content: `计划验证问题: ${validation.issues.join('; ')}`,
+            content: `计划验证问题: ${validation.hardIssues.join('; ')}`,
             timestamp: Date.now(),
           });
+        }
+        if (validation.softWarnings.length > 0) {
+          opLogger.info('[AgentLoop] Plan validation soft warnings', {warnings: validation.softWarnings});
+          // 存储软性警告，在下一次 sendToLLM 时注入系统提示引导 LLM 补全
+          // 不以系统消息形式插入对话，避免打断 AI 输出
+          this.planSoftWarnings = validation.softWarnings;
         }
 
         // 更新会话计划
@@ -470,13 +529,14 @@ export class AgentLoop {
           }
         });
 
-        this.state = AgentLoopState.AWAITING_LLM;
-        this.updateProgress('执行分析计划...');
+        // 注意：不在这里调用 sendToLLM(false)！
+        // 因为此时当前 LLM 流的 done 消息可能还没到达。
+        // 设置标志，等 LLM_DONE 事件到达后再发起新请求，避免旧流的 done 被误判为新流的完成。
+        this.waitingForPlanStreamDone = true;
+        this.updateProgress('计划已提交，等待当前流结束...');
         m.redraw();
 
-        opLogger.info('[AgentLoop] State: AWAITING_PLAN → AWAITING_LLM (plan execution)');
-        // 继续分析
-        await this.sendToLLM(false);
+        opLogger.notice('[AgentLoop] State: AWAITING_PLAN → AWAITING_PLAN (waiting for LLM_DONE before next request)');
         break;
 
       case 'LLM_TEXT_DELTA':
@@ -485,7 +545,19 @@ export class AgentLoop {
 
       case 'LLM_TOOL_USE':
         if (event.toolCall.name === 'submit_plan') {
-          // Planning Gate 工具调用 - Mock实现
+          // 刷新流式缓冲区，确保 AI 文本在工具调用消息之前渲染
+          this.flushStreamBuffer();
+
+          // 添加 tool_call 消息（UI 显示 + LLM 协议必需）
+          this.addMessage({
+            id: `tool_call_${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            toolCall: event.toolCall,
+          });
+
+          // 构建分析计划
           const planData = event.toolCall.arguments as {
             phases?: Array<{
               id: string;
@@ -496,9 +568,21 @@ export class AgentLoop {
             }>;
             successCriteria?: string[];
           };
+          // 优先使用 LLM 识别的场景类型（语义理解更准确），
+          // 兜底使用前端关键词分类的结果
+          const llmSceneType = (event.toolCall.arguments as {sceneType?: string}).sceneType as SceneType | undefined;
+          const effectiveSceneType = llmSceneType || this.currentSceneType;
+          if (llmSceneType && llmSceneType !== this.currentSceneType) {
+            opLogger.notice('[AgentLoop] LLM overrides scene classification', {
+              frontendScene: this.currentSceneType,
+              llmScene: llmSceneType,
+              reason: 'LLM semantic understanding overrides frontend keyword matching',
+            });
+            this.currentSceneType = effectiveSceneType;
+          }
           const plan: AnalysisPlan = {
             id: `plan_${Date.now()}`,
-            sceneType: this.currentSceneType,
+            sceneType: effectiveSceneType,
             phases: (planData.phases ?? []).map((p) => ({
               id: p.id,
               name: p.name,
@@ -512,9 +596,40 @@ export class AgentLoop {
             submittedAt: Date.now(),
           };
           await this.transition({type: 'PLAN_SUBMITTED', plan});
+
+          // 添加 tool_result 消息（LLM 协议必需）
+          // 让 LLM 知道计划已被接受，不需要再调用 submit_plan
+          this.addMessage({
+            id: `tool_result_${Date.now()}`,
+            role: 'tool',
+            content: `计划已接受（ID: ${plan.id}，${plan.phases.length} 个阶段）。请按照计划执行分析，使用 execute_sql、invoke_skill 等工具。`,
+            timestamp: Date.now(),
+            toolResult: {
+              toolCallId: event.toolCall.id,
+              success: true,
+              data: {
+                planId: plan.id,
+                phaseCount: plan.phases.length,
+                phases: plan.phases.map((p) => p.name),
+              },
+            },
+          });
         } else {
-          // 其他工具调用
-          await this.executeToolCall(event.toolCall);
+          // AWAITING_PLAN 阶段不允许执行非 submit_plan 的工具调用
+          // 因为 LLM 流的 tool_use 后面紧跟 done，工具结果无法在同一轮返回给 LLM
+          // 添加系统消息引导 LLM 先提交分析计划
+          opLogger.warn('[AgentLoop] Tool call rejected in AWAITING_PLAN state', {
+            toolName: event.toolCall.name,
+            hint: 'LLM should submit_plan first',
+          });
+          this.addMessage({
+            id: `system_${Date.now()}`,
+            role: 'system',
+            content: this.currentPlan
+              ? `分析计划已提交，工具 ${event.toolCall.name} 将在后续分析阶段使用。请等待当前流完成后再执行其他工具。`
+              : `当前阶段需要先提交分析计划（使用 submit_plan 工具），之后才能使用 ${event.toolCall.name} 等工具。`,
+            timestamp: Date.now(),
+          });
         }
         break;
 
@@ -524,6 +639,26 @@ export class AgentLoop {
           const templatePlan =
             this.planningGate.createPlanTemplate(this.currentSceneType);
           await this.transition({type: 'PLAN_SUBMITTED', plan: templatePlan});
+          // 如果模板计划也设置了 waitingForPlanStreamDone，等待下一次 LLM_DONE
+          // 但模板路径不会触发 waitingForPlanStreamDone（因为没有提前收到 submit_plan），所以这里直接继续
+          if (!this.waitingForPlanStreamDone) {
+            // 模板路径：计划刚创建，直接发起新请求
+            this.state = AgentLoopState.AWAITING_LLM;
+            this.updateProgress('执行分析计划...');
+            m.redraw();
+            opLogger.notice('[AgentLoop] Template plan created, sending next LLM request');
+            await this.sendToLLM(false);
+          }
+          // 如果 waitingForPlanStreamDone 为 true，下面的逻辑会处理
+        }
+        // 计划已提交且当前流已结束，发起新的 LLM 请求执行分析
+        if (this.waitingForPlanStreamDone && this.currentPlan) {
+          this.waitingForPlanStreamDone = false;
+          this.state = AgentLoopState.AWAITING_LLM;
+          this.updateProgress('执行分析计划...');
+          m.redraw();
+          opLogger.notice('[AgentLoop] Plan stream done, sending next LLM request');
+          await this.sendToLLM(false);
         }
         break;
     }
@@ -537,21 +672,69 @@ export class AgentLoop {
         break;
 
       case 'LLM_TOOL_USE':
-        this.state = AgentLoopState.EXECUTING_TOOL;
-        this.pendingToolCalls.set(event.toolCall.id, event.toolCall);
-        this.updateProgress(`执行工具: ${event.toolCall.name}`);
-        m.redraw();
-        opLogger.info('[AgentLoop] State: AWAITING_LLM → EXECUTING_TOOL', {
-          toolName: event.toolCall.name,
-          toolCallId: event.toolCall.id,
-          args: event.toolCall.arguments,
-        });
-        await this.executeToolCall(event.toolCall);
+        // 如果计划已存在，忽略 LLM 重复调用的 submit_plan
+        // 场景：第1次 LLM 流已提交计划，第2次 LLM 流中 LLM 又尝试提交计划
+        if (event.toolCall.name === 'submit_plan') {
+          if (this.currentPlan) {
+            opLogger.warn('[AgentLoop] submit_plan called again but plan already exists, skipping (fallback)', {
+              existingPlanId: this.currentPlan.id,
+              toolCallId: event.toolCall.id,
+            });
+            // 刷新当前流式文本缓冲，确保之前的 AI 文本先渲染
+            this.flushStreamBuffer();
+            // 添加工具调用消息（UI 显示）
+            this.addMessage({
+              id: `tool_call_${Date.now()}`,
+              role: 'assistant',
+              content: '',
+              timestamp: Date.now(),
+              toolCall: event.toolCall,
+            });
+            // 添加 tool_result 消息（LLM 协议必需，告知计划已存在）
+            this.addMessage({
+              id: `tool_result_${Date.now()}`,
+              role: 'tool',
+              content: `计划已存在（ID: ${this.currentPlan.id}），无需重复提交。请使用 execute_sql、invoke_skill 等工具开始分析。`,
+              timestamp: Date.now(),
+              toolResult: {
+                toolCallId: event.toolCall.id,
+                success: true,
+                data: {note: 'Plan already exists. Proceed with analysis tools.'},
+              },
+            });
+            m.redraw();
+            // 注意：不增加 toolCallCount，不改变状态
+            // submit_plan 不是分析工具调用，此处重复调用不应计数
+          } else {
+            // 计划不存在（理论上不应该发生），正常处理
+            this.state = AgentLoopState.EXECUTING_TOOL;
+            this.pendingToolCalls.set(event.toolCall.id, event.toolCall);
+            this.updateProgress(`执行工具: ${event.toolCall.name}`);
+            m.redraw();
+            opLogger.notice('[AgentLoop] State: AWAITING_LLM → EXECUTING_TOOL', {
+              toolName: event.toolCall.name,
+              toolCallId: event.toolCall.id,
+              args: event.toolCall.arguments,
+            });
+            await this.executeToolCall(event.toolCall);
+          }
+        } else {
+          this.state = AgentLoopState.EXECUTING_TOOL;
+          this.pendingToolCalls.set(event.toolCall.id, event.toolCall);
+          this.updateProgress(`执行工具: ${event.toolCall.name}`);
+          m.redraw();
+          opLogger.notice('[AgentLoop] State: AWAITING_LLM → EXECUTING_TOOL', {
+            toolName: event.toolCall.name,
+            toolCallId: event.toolCall.id,
+            args: event.toolCall.arguments,
+          });
+          await this.executeToolCall(event.toolCall);
+        }
         break;
 
       case 'LLM_DONE':
         this.finalizeStreamingMessage();
-        opLogger.info('[AgentLoop] LLM_DONE received', {
+        opLogger.notice('[AgentLoop] LLM_DONE received', {
           toolCallCount: this.toolCallCount,
           usage: event.usage,
         });
@@ -567,24 +750,38 @@ export class AgentLoop {
             }
           });
         }
-        // 工具调用次数不足时，跳过全量验证直接完成
-        // 避免在分析早期（仅调用探索性工具时）触发必然失败的L2验证
-        const MIN_TOOL_CALLS_FOR_VERIFICATION = 2;
-        if (this.toolCallCount < MIN_TOOL_CALLS_FOR_VERIFICATION) {
-          opLogger.info('Skipping verification: insufficient tool calls', {
-            toolCallCount: this.toolCallCount,
-            minimum: MIN_TOOL_CALLS_FOR_VERIFICATION,
+
+        // 零工具调用：LLM 只输出了文本但没有调用分析工具，继续请求
+        // 保护：限制连续零工具调用的重试次数，避免无限循环
+        if (this.toolCallCount === 0) {
+          this.zeroToolCallRetries++;
+          if (this.zeroToolCallRetries >= 3) {
+            opLogger.warn('[AgentLoop] Max zero-tool-call retries reached, completing analysis');
+            this.state = AgentLoopState.COMPLETE;
+            this.updateProgress('分析完成');
+            this.finalizeAnalysis();
+            m.redraw();
+            break;
+          }
+          opLogger.notice('[AgentLoop] No tool calls yet, sending next LLM request to continue analysis', {
+            zeroToolCallRetries: this.zeroToolCallRetries,
           });
-          this.state = AgentLoopState.COMPLETE;
-          this.updateProgress('分析完成');
-          this.finalizeAnalysis();
+          this.updateProgress('继续分析...');
           m.redraw();
-        } else {
-          this.state = AgentLoopState.VERIFYING;
-          this.updateProgress('验证结果...');
-          m.redraw();
-          await this.runVerification();
+          await this.sendToLLM(false);
+          break;
         }
+        // 有实际工具调用后重置计数器
+        this.zeroToolCallRetries = 0;
+
+        // 统一进入验证流程
+        // 之前 toolCallCount < 2 跳过验证直接完成的逻辑已移除：
+        // 工具调用不足时不应直接完成，验证器会根据实际情况判断分析充分性
+        // L2 验证中 progressRatio < 阈值时会降低要求，不会误判
+        this.state = AgentLoopState.VERIFYING;
+        this.updateProgress('验证结果...');
+        m.redraw();
+        await this.runVerification();
         break;
     }
   }
@@ -632,7 +829,7 @@ export class AgentLoop {
       this.updateProgress('等待AI响应...');
       m.redraw();
 
-      opLogger.info('[AgentLoop] State: EXECUTING_TOOL → AWAITING_LLM (all tools done, continuing)');
+      opLogger.notice('[AgentLoop] State: EXECUTING_TOOL → AWAITING_LLM (all tools done, continuing)');
       // 发送工具结果，继续对话
       await this.sendToLLM(false);
     }
@@ -705,10 +902,12 @@ export class AgentLoop {
         Date.now() - c.timestamp < AgentLoop.DEDUP_WINDOW_MS,
     );
 
-    if (recentCalls.length >= AgentLoop.MAX_SAME_TOOL_CALLS) {
+    const dedupLimit = AgentLoop.TOOL_DEDUP_LIMITS[toolCall.name] ?? AgentLoop.DEFAULT_DEDUP_LIMIT;
+    if (recentCalls.length >= dedupLimit) {
       opLogger.warn('Duplicate tool call detected, skipping', {
         toolName: toolCall.name,
         callCount: recentCalls.length,
+        dedupLimit,
       });
 
       // 注入系统消息提示 LLM 不要重复
@@ -716,7 +915,7 @@ export class AgentLoop {
         id: `dedup_${Date.now()}`,
         role: 'system',
         content:
-          `你已经连续调用 ${toolCall.name} ${recentCalls.length} 次且参数相同。` +
+          `你已经连续调用 ${toolCall.name} ${recentCalls.length} 次且参数相同（该工具上限${dedupLimit}次）。` +
           `请不要再重复调用同一工具，改用其他工具继续分析。` +
           `建议下一步: 执行计划中尚未调用的工具 (如 execute_sql, invoke_skill 等)。`,
         timestamp: Date.now(),
@@ -806,10 +1005,26 @@ export class AgentLoop {
    * 发送消息到 LLM（通过 WebSocket）
    */
   private async sendToLLM(requirePlan: boolean): Promise<void> {
-    const systemPrompt = this.contextManager.getSystemPrompt();
+    let systemPrompt = this.contextManager.getSystemPrompt();
     const messages = this.getSessionMessages();
 
-    opLogger.info('[AgentLoop] >>> Sending to LLM', {
+    // 计划已提交后动态切换系统提示，告知 LLM 执行分析而非提交计划
+    if (!requirePlan && this.currentPlan) {
+      systemPrompt += `\n\n[计划状态]\n分析计划已提交并被接受（ID: ${this.currentPlan.id}，${this.currentPlan.phases.length} 个阶段）。\n请直接按照计划执行分析，不要再调用 submit_plan。\n使用 execute_sql、invoke_skill 等工具开始各阶段的分析。`;
+    }
+
+    // 将计划验证的软性警告注入系统提示，引导 LLM 自行补全
+    // 不以对话系统消息形式展示，避免打断 AI 输出
+    if (this.planSoftWarnings.length > 0) {
+      const warningHints = this.planSoftWarnings
+        .map((w, i) => `${i + 1}. ${w}`)
+        .join('\n');
+      systemPrompt += `\n\n[计划改进建议]\n你的分析计划有以下可改进之处，请在后续分析中注意：\n${warningHints}`;
+      // 注入后清空，避免重复注入
+      this.planSoftWarnings = [];
+    }
+
+    opLogger.notice('[AgentLoop] >>> Sending to LLM', {
       requirePlan,
       messageCount: messages.length,
       scene: this.currentSceneType,
@@ -836,34 +1051,47 @@ export class AgentLoop {
         toolCall: m.toolCall,
         toolResult: m.toolResult,
       })),
-      tools: this.toolRegistry.getToolDefinitions(),
+      tools: requirePlan
+        ? this.toolRegistry.getToolDefinitions().filter((t) => t.name === 'submit_plan')
+        : this.toolRegistry.getToolDefinitions().filter((t) => t.name !== 'submit_plan'),
       systemPrompt,
       stream: true,
       requirePlan,
     };
 
-    // 启动流式处理
+    // 启动流式处理：先停止旧流并递增 generation，防止旧流残留回调干扰
+    this.streamHandler.stopStream();
+    this.streamGeneration++;
+    const currentGeneration = this.streamGeneration;
+
     this.streamHandler.startStream(agentId, {
       onTextDelta: (text) => {
+        if (this.streamGeneration !== currentGeneration) return; // 忽略旧流回调
         opLogger.debug('[AgentLoop] <<< onTextDelta callback', {length: text.length});
         this.transition({type: 'LLM_TEXT_DELTA', text});
       },
       onToolUse: (toolCall) => {
-        opLogger.info('[AgentLoop] <<< onToolUse callback', {toolName: toolCall.name, toolCallId: toolCall.id});
+        if (this.streamGeneration !== currentGeneration) return; // 忽略旧流回调
+        opLogger.notice('[AgentLoop] <<< onToolUse callback', {toolName: toolCall.name, toolCallId: toolCall.id});
         this.transition({type: 'LLM_TOOL_USE', toolCall});
       },
       onDone: (usage) => {
-        opLogger.info('[AgentLoop] <<< onDone callback', {usage});
+        if (this.streamGeneration !== currentGeneration) { // 忽略旧流回调
+          opLogger.notice('[AgentLoop] <<< Stale onDone ignored', {generation: currentGeneration, current: this.streamGeneration});
+          return;
+        }
+        opLogger.notice('[AgentLoop] <<< onDone callback', {usage});
         this.transition({type: 'LLM_DONE', usage});
       },
       onError: (error) => {
+        if (this.streamGeneration !== currentGeneration) return; // 忽略旧流回调
         opLogger.error('[AgentLoop] <<< onError callback', error);
         this.transition({type: 'ERROR', error});
       },
     });
 
     // 发送请求：符合后端 ChatRequestSchema 格式
-    opLogger.info('[AgentLoop] >>> WebSocket send (chat)', {
+    opLogger.notice('[AgentLoop] >>> WebSocket send (chat)', {
       agentId,
       traceId,
       messageType: 'chat',
@@ -904,7 +1132,7 @@ export class AgentLoop {
         progressRatio,
       );
 
-      opLogger.info('[AgentLoop] Verification result', {
+      opLogger.notice('[AgentLoop] Verification result', {
         passed: result.passed,
         l1Issues: result.l1Issues.length,
         l2Issues: result.l2Issues.length,
@@ -944,7 +1172,7 @@ export class AgentLoop {
    * 最终化分析
    */
   private finalizeAnalysis(): void {
-    opLogger.info('[AgentLoop] === Analysis completed ===', {
+    opLogger.notice('[AgentLoop] === Analysis completed ===', {
       sceneType: this.currentSceneType,
       toolCallCount: this.toolCallCount,
       verificationRetries: this.verificationRetries,
@@ -961,22 +1189,60 @@ export class AgentLoop {
     this.verificationRetries = 0;
     this.currentPlan = null;
     this.pendingToolCalls.clear();
+    this.durationWarnLevel1Fired = false;
+    this.durationWarnLevel2Fired = false;
+    this.waitingForPlanStreamDone = false;
+    this.planSoftWarnings = [];
+    this.zeroToolCallRetries = 0;
   }
 
   /**
    * 检查限制（超时和迭代次数）
+   * 超时策略：3分钟提醒 → 5分钟再提醒 → 7分钟强管控
    */
   private checkLimits(): boolean {
     const elapsed = Date.now() - this.startTime;
+
+    // Level 1: 3分钟首次提醒
+    if (elapsed > AgentLoop.DURATION_WARN_LEVEL1 && !this.durationWarnLevel1Fired) {
+      this.durationWarnLevel1Fired = true;
+      const seconds = Math.round(elapsed / 1000);
+      this.addMessage({
+        id: `duration_warn1_${Date.now()}`,
+        role: 'system',
+        content: `当前分析已执行 ${seconds} 秒，耗时较长，请关注当前对话进展。`,
+        timestamp: Date.now(),
+      });
+      opLogger.notice('[AgentLoop] Duration warning level 1', {elapsedMs: elapsed});
+      m.redraw();
+    }
+
+    // Level 2: 5分钟再次提醒
+    if (elapsed > AgentLoop.DURATION_WARN_LEVEL2 && !this.durationWarnLevel2Fired) {
+      this.durationWarnLevel2Fired = true;
+      const seconds = Math.round(elapsed / 1000);
+      this.addMessage({
+        id: `duration_warn2_${Date.now()}`,
+        role: 'system',
+        content: `当前分析已执行 ${seconds} 秒，耗时较久，建议检查对话内容是否正常，或考虑取消重新提问。`,
+        timestamp: Date.now(),
+      });
+      opLogger.notice('[AgentLoop] Duration warning level 2', {elapsedMs: elapsed});
+      m.redraw();
+    }
+
+    // 硬超时：7分钟强制终止
     if (elapsed > AgentLoop.MAX_DURATION_MS) {
       this.state = AgentLoopState.ERROR;
+      const seconds = Math.round(elapsed / 1000);
       this.addMessage({
         id: `timeout_${Date.now()}`,
         role: 'system',
-        content: `分析超时（超过${AgentLoop.MAX_DURATION_MS / 1000}秒）`,
+        content: `分析超时（已执行 ${seconds} 秒，超过 ${AgentLoop.MAX_DURATION_MS / 1000} 秒上限），已强制终止。`,
         timestamp: Date.now(),
       });
       this.updateProgress('超时');
+      opLogger.warn('[AgentLoop] Analysis timed out', {elapsedMs: elapsed});
       m.redraw();
       return true;
     }

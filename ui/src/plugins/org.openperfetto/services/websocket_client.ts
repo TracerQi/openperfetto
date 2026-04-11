@@ -102,7 +102,7 @@ export class WebSocketClient {
       return;
     }
 
-    opLogger.info('[WS] Connecting...', {url: this.url});
+    opLogger.notice('[WS] Connecting...', {url: this.url});
     this.updateState({status: 'connecting'});
 
     try {
@@ -119,7 +119,7 @@ export class WebSocketClient {
    * 断开连接
    */
   disconnect(): void {
-    opLogger.info('[WS] Disconnecting');
+    opLogger.notice('[WS] Disconnecting');
     this.stopHeartbeat();
     this.cancelReconnect();
 
@@ -140,7 +140,7 @@ export class WebSocketClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
         const serialized = JSON.stringify(message);
-        opLogger.info('[WS] >>> Send message', {
+        opLogger.notice('[WS] >>> Send message', {
           type: message.type,
           size: serialized.length,
           traceId: message.traceId,
@@ -202,7 +202,7 @@ export class WebSocketClient {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
-      opLogger.info('[WS] <<< Connected', {url: this.url});
+      opLogger.notice('[WS] <<< Connected', {url: this.url});
       this.updateState({status: 'connected', agentId: this.generateAgentId()});
       this.startHeartbeat();
       this.flushPendingMessages();
@@ -210,7 +210,7 @@ export class WebSocketClient {
 
     this.ws.onclose = (event) => {
       this.stopHeartbeat();
-      opLogger.info('[WS] <<< Closed', {code: event.code, wasClean: event.wasClean});
+      opLogger.notice('[WS] <<< Closed', {code: event.code, wasClean: event.wasClean});
       if (event.wasClean) {
         this.updateState({status: 'disconnected'});
       } else {
@@ -249,7 +249,7 @@ export class WebSocketClient {
           return;
         }
 
-        opLogger.info('[WS] <<< Message dispatched to callbacks', {
+        opLogger.notice('[WS] <<< Message dispatched to callbacks', {
           type: message.type,
           payloadKeys: message.payload ? Object.keys(message.payload as object) : [],
         });

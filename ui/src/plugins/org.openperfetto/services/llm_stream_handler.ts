@@ -84,7 +84,7 @@ export class LLMStreamHandler {
    * 开始流式监听
    */
   startStream(agentId: string, callbacks: LLMStreamCallbacks): void {
-    opLogger.info('[Stream] >>> Stream started', {agentId});
+    opLogger.notice('[Stream] >>> Stream started', {agentId});
     this.callbacks = callbacks;
     this.currentAgentId = agentId;
     this.isStreaming = true;
@@ -100,7 +100,7 @@ export class LLMStreamHandler {
    * 停止流式监听
    */
   stopStream(): void {
-    opLogger.info('[Stream] <<< Stream stopped', {agentId: this.currentAgentId});
+    opLogger.notice('[Stream] <<< Stream stopped', {agentId: this.currentAgentId});
     this.flushTextBuffer();
     this.isStreaming = false;
     this.callbacks = null;
@@ -146,7 +146,7 @@ export class LLMStreamHandler {
       return;
     }
 
-    opLogger.info('[Stream] <<< Processing stream message', {
+    opLogger.notice('[Stream] <<< Processing stream message', {
       type: streamMsg.type,
       agentId: streamMsg.agentId,
     });
@@ -175,7 +175,7 @@ export class LLMStreamHandler {
             'id' in toolCallData &&
             'name' in toolCallData
           ) {
-            opLogger.info('[Stream] tool_use parsed', {
+            opLogger.notice('[Stream] tool_use parsed', {
               toolName: (toolCallData as {name: string}).name,
               toolCallId: (toolCallData as {id: string}).id,
               argKeys: Object.keys(
@@ -198,28 +198,43 @@ export class LLMStreamHandler {
         // Tool 结果由 AgentLoop 处理，这里不需要特殊处理
         break;
 
-      case 'error':
+      case 'error': {
         this.flushTextBuffer();
-        {
-          const errorPayload = streamMsg.payload as Record<string, unknown> | undefined;
-          const errorMsg =
-            (errorPayload?.error as string) ||
-            (errorPayload?.message as string) ||
-            'Unknown error';
-          const errorCode = errorPayload?.code as string | undefined;
-          const fullError = errorCode ? `[${errorCode}] ${errorMsg}` : errorMsg;
-          opLogger.error('[Stream] <<< Error received', {error: fullError, code: errorCode});
-          this.callbacks.onError(fullError);
+        const errorPayload = streamMsg.payload as Record<string, unknown> | undefined;
+        const errorMsg =
+          (errorPayload?.error as string) ||
+          (errorPayload?.message as string) ||
+          'Unknown error';
+        const errorCode = errorPayload?.code as string | undefined;
+        const fullError = errorCode ? `[${errorCode}] ${errorMsg}` : errorMsg;
+        opLogger.error('[Stream] <<< Error received', {error: fullError, code: errorCode});
+        // 先保存回调、重置状态，再调用回调
+        // 防止回调内启动新流后被 this.isStreaming=false 覆盖（重入Bug）
+        const onError = this.callbacks?.onError;
+        this.isStreaming = false;
+        this.callbacks = null;
+        if (onError) {
+          onError(fullError);
         }
-        this.isStreaming = false;
         break;
+      }
 
-      case 'done':
+      case 'done': {
         this.flushTextBuffer();
-        opLogger.info('[Stream] <<< Stream done', {usage: streamMsg.payload?.usage});
-        this.callbacks.onDone(streamMsg.payload?.usage);
+        opLogger.notice('[Stream] <<< Stream done', {usage: streamMsg.payload?.usage});
+        // 先保存回调、重置状态，再调用回调
+        // 防止回调内启动新流后 isStreaming 被 this.isStreaming=false 覆盖（重入Bug）
+        // 时序：onDone回调 → AgentLoop处理 → sendToLLM → stopStream+startStream → isStreaming=true
+        //        回调返回后 → this.isStreaming=false → 覆盖！第二次流所有消息被丢弃
+        const onDone = this.callbacks?.onDone;
         this.isStreaming = false;
+        this.callbacks = null;
+        this.currentAgentId = '';
+        if (onDone) {
+          onDone(streamMsg.payload?.usage);
+        }
         break;
+      }
     }
   }
 

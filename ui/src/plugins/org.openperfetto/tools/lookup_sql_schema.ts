@@ -116,12 +116,16 @@ Available lookups:
     for (const it = result.iter({
       name: 'str',
       type: 'str',
-      notnull: 'number',
     }); it.valid(); it.next()) {
+      // PRAGMA table_info 的 notnull 列返回 VARINT 类型（类似 BigInt），
+      // 无法通过迭代器的 'number' 类型声明读取。
+      // 直接访问原始值并手动转换。
+      const rawNotNull = (it as unknown as Record<string, unknown>).notnull;
+      const notnull = rawNotNull === 1n || rawNotNull === 1;
       columns.push({
         name: it.name ?? '',
         type: it.type ?? '',
-        notnull: ((it.notnull as unknown as number) ?? 0) === 1,
+        notnull,
       });
     }
 

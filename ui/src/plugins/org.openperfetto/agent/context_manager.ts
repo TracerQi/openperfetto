@@ -350,7 +350,21 @@ export class ContextManager {
 - 分析阶段
 - 每个阶段使用的工具
 - 预期输出
-- 成功标准`;
+- 成功标准
+
+选择场景类型时，请根据用户问题语义选择最匹配的 sceneType:
+- scrolling: 滑动/滚动性能问题，帧率、掉帧、卡顿、jank
+- startup_cold: 冷启动/应用启动问题，启动时间、启动耗时、启动过程
+- startup_warm: 温启动问题，从后台恢复慢
+- startup_hot: 热启动问题，从最近任务恢复慢
+- anr: 应用无响应，ANR、界面卡死
+- lock_contention: 锁竞争问题
+- binder_blocking: Binder/IPC 阻塞
+- io_analysis: I/O 性能问题
+- high_load: CPU 高负载问题，CPU 占用高、计算密集
+- screen_on_off: 亮灭屏问题
+- unlock: 解锁性能问题
+- general: 通用性能分析`;
   }
 
   /**
@@ -374,7 +388,13 @@ export class ContextManager {
 推荐工具:
 - invoke_skill(frame_jank_detection)
 - trace_process_flow 用于阻塞调用
-- execute_sql 用于自定义帧查询`,
+- execute_sql 用于自定义帧查询
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- frame_analysis: 帧时间线分析
+- jank_detection: Jank 检测
+- blocking_identification: 阻塞调用识别
+- root_cause: 根因分析`,
 
       startup_cold: `# 冷启动分析策略
 
@@ -393,7 +413,13 @@ export class ContextManager {
 推荐工具:
 - invoke_skill(cold_startup_analysis)
 - trace_process_flow 用于启动序列
-- execute_sql 用于进程生命周期事件`,
+- execute_sql 用于进程生命周期事件
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- process_creation: 进程创建分析
+- initialization: 初始化阶段分析
+- first_frame: 首帧分析
+- root_cause: 根因分析`,
 
       startup_warm: `# 温启动分析策略
 
@@ -405,7 +431,12 @@ export class ContextManager {
 关键指标:
 - Resume 到首帧时间
 - Layout pass 持续时间
-- 数据加载延迟`,
+- 数据加载延迟
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- activity_resume: Activity 恢复分析
+- view_binding: 视图绑定分析
+- root_cause: 根因分析`,
 
       startup_hot: `# 热启动分析策略
 
@@ -416,7 +447,11 @@ export class ContextManager {
 
 关键指标:
 - Intent 到可见时间
-- 动画持续时间`,
+- 动画持续时间
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- bring_to_front: 前台切换分析
+- root_cause: 根因分析`,
 
       anr: `# ANR 分析策略
 
@@ -431,7 +466,13 @@ export class ContextManager {
 - 阻塞调用栈
 - 竞争资源
 
-关键: 识别 ANR 前的精确 5 秒窗口`,
+关键: 识别 ANR 前的精确 5 秒窗口
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- blocking_detection: 阻塞检测
+- stack_analysis: 调用栈分析
+- resource_contention: 资源竞争分析
+- root_cause: 根因分析`,
 
       lock_contention: `# 锁竞争分析策略
 
@@ -443,7 +484,12 @@ export class ContextManager {
 关键指标:
 - 竞争持续时间
 - 受影响线程
-- 锁持有者识别`,
+- 锁持有者识别
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- contention_detection: 竞争检测
+- holder_identification: 持有者识别
+- root_cause: 根因分析`,
 
       binder_blocking: `# Binder 阻塞分析策略
 
@@ -455,7 +501,12 @@ export class ContextManager {
 关键指标:
 - 事务往返时间
 - 服务端处理时间
-- 队列等待时间`,
+- 队列等待时间
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- transaction_analysis: 事务分析
+- server_delay: 服务端延迟分析
+- root_cause: 根因分析`,
 
       io_analysis: `# I/O 分析策略
 
@@ -467,7 +518,12 @@ export class ContextManager {
 关键指标:
 - 每次操作的 I/O 持续时间
 - 主线程 I/O 百分比
-- 阻塞读/写调用`,
+- 阻塞读/写调用
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- io_detection: I/O 检测
+- main_thread_io: 主线程 I/O 分析
+- root_cause: 根因分析`,
 
       high_load: `# 高 CPU 负载分析策略
 
@@ -479,21 +535,34 @@ export class ContextManager {
 关键指标:
 - CPU 使用百分比
 - 上下文切换率
-- Runnable 时间 vs Running 时间`,
+- Runnable 时间 vs Running 时间
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- cpu_analysis: CPU 使用率分析
+- hotspot_detection: 性能瓶颈检测
+- root_cause: 根因分析`,
 
       screen_on_off: `# 亮灭屏分析策略
 
 重点领域:
 1. 显示状态转换
 2. Wake lock 行为
-3. 电源管理事件`,
+3. 电源管理事件
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- state_transition: 状态转换分析
+- root_cause: 根因分析`,
 
       unlock: `# 设备解锁分析策略
 
 重点领域:
 1. Keyguard dismiss 时序
 2. 生物识别认证延迟
-3. 解锁后 Activity 启动`,
+3. 解锁后 Activity 启动
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- keyguard_dismiss: 锁屏解除分析
+- root_cause: 根因分析`,
 
       general: `# 通用分析策略
 
@@ -505,7 +574,12 @@ export class ContextManager {
 4. 分析 CPU 和内存模式
 5. 查找 I/O 和 Binder 问题
 
-使用 execute_sql 和 lookup_sql_schema 进行探索。`,
+使用 execute_sql 和 lookup_sql_schema 进行探索。
+
+推荐阶段 ID（提交计划时请使用这些 ID）:
+- data_collection: 数据收集
+- pattern_identification: 模式识别
+- root_cause: 根因分析`,
     };
 
     return strategies[sceneType] || strategies.general;

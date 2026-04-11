@@ -127,8 +127,8 @@ describe('AgentLoop 配置常量', () => {
   });
 
   it('MAX_DURATION_MS 应该有合理的默认值', () => {
-    // 根据源码，MAX_DURATION_MS = 5 * 60 * 1000 = 300000 (5分钟)
-    const MAX_DURATION_MS = 5 * 60 * 1000;
+    // 根据源码，MAX_DURATION_MS = 7 * 60 * 1000 = 420000 (7分钟)
+    const MAX_DURATION_MS = 7 * 60 * 1000;
     expect(MAX_DURATION_MS).toBeGreaterThan(60000); // 至少 1 分钟
     expect(MAX_DURATION_MS).toBeLessThanOrEqual(600000); // 最多 10 分钟
   });

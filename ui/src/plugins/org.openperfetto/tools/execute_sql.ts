@@ -112,7 +112,12 @@ Important:
         const row: unknown[] = [];
         for (const col of columns) {
           // 使用索引访问迭代器属性
-          const value = (iter as unknown as Record<string, unknown>)[col.name];
+          let value = (iter as unknown as Record<string, unknown>)[col.name];
+          // BigInt 无法被 JSON.stringify 序列化，转换为字符串
+          // Perfetto trace processor 对 upid/utid/ts/dur 等列返回 BigInt
+          if (typeof value === 'bigint') {
+            value = value.toString();
+          }
           row.push(value);
         }
         rows.push(row);

@@ -21,6 +21,10 @@ import {SceneType} from '../types/plugin_state';
 export interface PlanValidationResult {
   valid: boolean;
   issues: string[];
+  /** 硬性问题：结构缺陷，必须通知用户 */
+  hardIssues: string[];
+  /** 软性警告：建议性内容，仅日志记录 */
+  softWarnings: string[];
 }
 
 /**
@@ -61,60 +65,61 @@ export class PlanningGate {
 
   /** 场景必需阶段的语义别名映射 */
   private phaseAliases: Map<string, string[]> = new Map([
-    ['process_creation', ['fork', 'process_start', 'process_info', 'target_app', 'identify_app', 'app_identify']],
-    ['initialization', ['init', 'startup_phase', 'cold_startup', 'startup_analysis', 'app_init', 'bindApplication']],
-    ['first_frame', ['first_draw', 'ttfd', 'ttid', 'frame_render', 'rendering', 'first_frame_draw']],
-    ['root_cause', ['root_cause_analysis', 'cause', 'conclusion', 'final_analysis', 'diagnosis']],
-    ['frame_analysis', ['frame_timeline', 'jank_detection', 'frame_inspection']],
-    ['blocking_identification', ['blocking_detection', 'blocking_call', 'blocking_analysis', 'main_thread_blocking']],
-    ['jank_detection', ['jank_frame', 'frame_jank', 'detect_jank']],
-    ['activity_resume', ['resume', 'onResume', 'activity_start']],
-    ['view_binding', ['view_create', 'layout_inflate', 'view_init']],
-    ['bring_to_front', ['foreground', 'move_front', 'resume_activity']],
-    ['blocking_detection', ['block_detect', 'main_block', 'ui_block']],
-    ['stack_analysis', ['call_stack', 'stack_trace', 'trace_stack']],
-    ['resource_contention', ['contention', 'lock_wait', 'resource_wait']],
-    ['contention_detection', ['lock_contention_detect', 'contention_find']],
-    ['holder_identification', ['lock_holder', 'holder_find', 'owner_thread']],
-    ['transaction_analysis', ['binder_trans', 'transaction_trace']],
-    ['server_delay', ['service_delay', 'binder_delay', 'server_slow']],
-    ['io_detection', ['io_find', 'disk_detect', 'io_issue']],
-    ['main_thread_io', ['ui_io', 'main_disk', 'main_read_write']],
-    ['cpu_analysis', ['cpu_usage', 'cpu_load', 'cpu_profile']],
-    ['hotspot_detection', ['hotspot', 'bottleneck', 'cpu_hot']],
-    ['state_transition', ['power_state', 'screen_transition']],
-    ['keyguard_dismiss', ['lock_screen', 'keyguard_exit']],
-    ['data_collection', ['collect', 'query_data', 'fetch_data']],
-    ['pattern_identification', ['pattern_find', 'anomaly_detect', 'identify_pattern']],
+    ['process_creation', ['fork', 'process_start', 'process_info', 'target_app', 'identify_app', 'app_identify', '进程创建', '进程启动', '应用启动']],
+    ['initialization', ['init', 'startup_phase', 'cold_startup', 'startup_analysis', 'app_init', 'bindApplication', '初始化', '应用初始化', '启动初始化']],
+    ['first_frame', ['first_draw', 'ttfd', 'ttid', 'frame_render', 'rendering', 'first_frame_draw', '首帧', '首帧渲染', '第一帧']],
+    ['root_cause', ['root_cause_analysis', 'cause', 'conclusion', 'final_analysis', 'diagnosis', '根因', '根本原因', '根因分析', '结论', '总结']],
+    ['frame_analysis', ['frame_timeline', 'jank_detection', 'frame_inspection', '帧分析', '帧时间线']],
+    ['blocking_identification', ['blocking_detection', 'blocking_call', 'blocking_analysis', 'main_thread_blocking', '阻塞识别', '阻塞检测', '主线程阻塞']],
+    ['jank_detection', ['jank_frame', 'frame_jank', 'detect_jank', '卡顿检测', '掉帧检测']],
+    ['activity_resume', ['resume', 'onResume', 'activity_start', 'Activity恢复']],
+    ['view_binding', ['view_create', 'layout_inflate', 'view_init', '视图绑定', '视图创建']],
+    ['bring_to_front', ['foreground', 'move_front', 'resume_activity', '前台切换']],
+    ['blocking_detection', ['block_detect', 'main_block', 'ui_block', '阻塞检测']],
+    ['stack_analysis', ['call_stack', 'stack_trace', 'trace_stack', '调用栈', '堆栈分析']],
+    ['resource_contention', ['contention', 'lock_wait', 'resource_wait', '资源竞争', '锁竞争']],
+    ['contention_detection', ['lock_contention_detect', 'contention_find', '竞争检测']],
+    ['holder_identification', ['lock_holder', 'holder_find', 'owner_thread', '锁持有者']],
+    ['transaction_analysis', ['binder_trans', 'transaction_trace', '事务分析', 'Binder分析']],
+    ['server_delay', ['service_delay', 'binder_delay', 'server_slow', '服务端延迟']],
+    ['io_detection', ['io_find', 'disk_detect', 'io_issue', 'IO检测', '磁盘检测']],
+    ['main_thread_io', ['ui_io', 'main_disk', 'main_read_write', '主线程IO', '主线程磁盘']],
+    ['cpu_analysis', ['cpu_usage', 'cpu_load', 'cpu_profile', 'CPU分析', 'CPU使用率', 'CPU负载', '性能分析', '耗时分析']],
+    ['hotspot_detection', ['hotspot', 'bottleneck', 'cpu_hot', '热点检测', '瓶颈检测', '性能瓶颈', '耗时瓶颈']],
+    ['state_transition', ['power_state', 'screen_transition', '状态转换']],
+    ['keyguard_dismiss', ['lock_screen', 'keyguard_exit', '锁屏解除']],
+    ['data_collection', ['collect', 'query_data', 'fetch_data', '数据收集', '数据采集']],
+    ['pattern_identification', ['pattern_find', 'anomaly_detect', 'identify_pattern', '模式识别', '异常检测']],
   ]);
 
   /**
    * 验证分析计划的完整性
    */
   validatePlan(plan: AnalysisPlan): PlanValidationResult {
-    const issues: string[] = [];
+    const hardIssues: string[] = [];
+    const softWarnings: string[] = [];
 
-    // 1. 检查计划是否有足够的阶段（至少2个）
+    // 1. 检查计划是否有足够的阶段（至少2个）— 硬性
     if (plan.phases.length < 2) {
-      issues.push('计划必须至少包含2个阶段');
+      hardIssues.push('计划必须至少包含2个阶段');
     }
 
-    // 2. 检查每个阶段是否有工具（至少1个）
+    // 2. 检查每个阶段是否有工具（至少1个）— 硬性
     for (const phase of plan.phases) {
       if (!phase.requiredTools || phase.requiredTools.length === 0) {
-        issues.push(`阶段 "${phase.name}" 未指定所需工具`);
+        hardIssues.push(`阶段 "${phase.name}" 未指定所需工具`);
       }
       if (!phase.expectedOutputs || phase.expectedOutputs.length === 0) {
-        issues.push(`阶段 "${phase.name}" 未指定预期输出`);
+        softWarnings.push(`阶段 "${phase.name}" 未指定预期输出`);
       }
     }
 
-    // 3. 检查成功标准（至少1个）
+    // 3. 检查成功标准（至少1个）— 软性（不阻塞流程）
     if (!plan.successCriteria || plan.successCriteria.length === 0) {
-      issues.push('计划必须定义成功标准');
+      softWarnings.push('计划未定义成功标准');
     }
 
-    // 4. 检查是否包含必要的阶段（宽松检查）
+    // 4. 检查是否包含必要的阶段 — 软性（建议性）
     const requiredPhases =
       this.requiredPhases.get(plan.sceneType) ||
       this.requiredPhases.get('general')!;
@@ -122,7 +127,6 @@ export class PlanningGate {
     const phaseIds = plan.phases.map((p) => p.id.toLowerCase());
     const phaseNames = plan.phases.map((p) => p.name.toLowerCase());
 
-    // 检查是否至少匹配了必需阶段的一半
     let matchedCount = 0;
     for (const required of requiredPhases) {
       const found = this.matchesRequiredPhase(phaseIds, phaseNames, required);
@@ -131,22 +135,25 @@ export class PlanningGate {
       }
     }
 
-    // 如果匹配不到一半必需阶段，添加警告
+    // 匹配不到一半必需阶段时仅作为软性建议，不阻断流程
     if (matchedCount < requiredPhases.length / 2) {
-      issues.push(
+      softWarnings.push(
         `计划可能缺少关键阶段。建议阶段: ${requiredPhases.join(', ')}`,
       );
     }
 
+    const issues = [...hardIssues, ...softWarnings];
     return {
-      valid: issues.length === 0,
+      valid: hardIssues.length === 0,  // 只有硬性问题才影响 valid
       issues,
+      hardIssues,
+      softWarnings,
     };
   }
 
   /**
    * 检查必需阶段是否被计划中的某个阶段匹配
-   * 支持字面匹配和语义别名匹配
+   * 支持字面匹配、语义别名匹配、关键词分词匹配
    */
   private matchesRequiredPhase(
     phaseIds: string[],
@@ -165,7 +172,7 @@ export class PlanningGate {
 
     // 2. 语义别名匹配
     const aliases = this.phaseAliases.get(required) || [];
-    return aliases.some(
+    const aliasMatch = aliases.some(
       (alias) =>
         phaseIds.some(
           (id) => id.includes(alias) || alias.includes(id),
@@ -174,6 +181,39 @@ export class PlanningGate {
           (name) => name.includes(alias) || alias.includes(name),
         ),
     );
+    if (aliasMatch) return true;
+
+    // 3. 关键词分词匹配：将阶段名拆分为关键词，检查是否包含别名关键词
+    // 例如 "startup_performance_analysis" 拆分为 ["startup", "performance", "analysis"]
+    // 如果别名中包含这些关键词，则匹配成功
+    const requiredKeywords = this.tokenizePhaseName(required);
+    const aliasesKeywords = aliases.flatMap((alias) => this.tokenizePhaseName(alias));
+    const allTargetKeywords = [...requiredKeywords, ...aliasesKeywords];
+
+    return phaseIds.some((id) => {
+      const idTokens = this.tokenizePhaseName(id);
+      return allTargetKeywords.some(
+        (target) => idTokens.some((token) => token.includes(target) || target.includes(token)),
+      );
+    }) || phaseNames.some((name) => {
+      const nameTokens = this.tokenizePhaseName(name);
+      return allTargetKeywords.some(
+        (target) => nameTokens.some((token) => token.includes(target) || target.includes(token)),
+      );
+    });
+  }
+
+  /**
+   * 将阶段名分词：按下划线、空格、驼峰拆分，并转小写
+   */
+  private tokenizePhaseName(name: string): string[] {
+    // 按下划线和空格拆分
+    const tokens = name
+      .replace(/([a-z])([A-Z])/g, '$1 $2')  // 驼峰分词
+      .split(/[_\s]+/)
+      .map((t) => t.toLowerCase())
+      .filter((t) => t.length >= 2);  // 过滤单字符
+    return tokens;
   }
 
   /**
