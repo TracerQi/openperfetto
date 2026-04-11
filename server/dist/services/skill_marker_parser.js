@@ -101,6 +101,36 @@ export class SkillMarkerParser {
         return modifiedText;
     }
     /**
+     * 异步替换文本中的 Skill 标记
+     * @param text 原始文本
+     * @param replacer 异步替换函数，接收 SkillMarker 返回替换文本的 Promise
+     */
+    async replaceAsync(text, replacer) {
+        const result = this.parse(text);
+        if (result.markers.length === 0) {
+            return text;
+        }
+        // 从后往前替换，避免索引偏移问题
+        const sortedMarkers = [...result.markers].sort((a, b) => b.startIndex - a.startIndex);
+        let modifiedText = text;
+        for (const marker of sortedMarkers) {
+            try {
+                const replacement = await replacer(marker);
+                modifiedText =
+                    modifiedText.slice(0, marker.startIndex) +
+                        replacement +
+                        modifiedText.slice(marker.endIndex);
+            }
+            catch (e) {
+                logger.warn('Failed to async replace skill marker', {
+                    skillId: marker.skillId,
+                    error: e instanceof Error ? e.message : 'Unknown error',
+                });
+            }
+        }
+        return modifiedText;
+    }
+    /**
      * 检查文本是否包含 Skill 标记
      */
     hasMarkers(text) {

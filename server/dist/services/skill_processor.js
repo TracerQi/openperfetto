@@ -212,6 +212,84 @@ export class SkillProcessor {
                 return { error: `Unknown type for ${name}: ${type}` };
         }
     }
+    /**
+     * 格式化 Skill 定义为 LLM 可理解的 Prompt 文本
+     * @param skillId Skill ID
+     * @param params 可选参数（用于日志）
+     * @returns 格式化的 Markdown 文本，Skill 不存在时返回 null
+     */
+    async formatSkillForPrompt(skillId, params) {
+        const skill = this.registry.getById(skillId);
+        if (!skill) {
+            logger.warn('Skill not found for prompt formatting', { skillId });
+            return null;
+        }
+        logger.debug('Formatting skill for prompt', { skillId, type: skill.type });
+        const lines = [];
+        // 基本信息
+        lines.push(`### Skill: ${skill.id}`);
+        lines.push(`- Description: ${skill.description}`);
+        lines.push(`- Type: ${skill.type}`);
+        // 参数列表
+        if (skill.parameters.length > 0) {
+            lines.push('- Parameters:');
+            for (const p of skill.parameters) {
+                const parts = [`${p.name} (${p.type}`];
+                parts.push(p.required ? ', required)' : ', optional)');
+                let line = `  - ${parts.join('')}`;
+                if (p.default !== undefined) {
+                    line += `, default: ${JSON.stringify(p.default)}`;
+                }
+                if (p.description) {
+                    line += `: ${p.description}`;
+                }
+                lines.push(line);
+            }
+        }
+        // SQL 模板
+        if (skill.sqlTemplate) {
+            const sql = skill.sqlTemplate.length > 500
+                ? skill.sqlTemplate.substring(0, 500) + '...'
+                : skill.sqlTemplate;
+            lines.push(`- SQL Template: ${sql.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`);
+        }
+        // 输出列定义
+        if (skill.outputSchema?.columns && skill.outputSchema.columns.length > 0) {
+            const cols = skill.outputSchema.columns
+                .map(c => `${c.name}(${c.type})`)
+                .join(', ');
+            lines.push(`- Output Columns: ${cols}`);
+        }
+        // composite 类型：steps 概要
+        if (skill.type === 'composite' && skill.steps && skill.steps.length > 0) {
+            lines.push(`- Steps (${skill.steps.length}):`);
+            for (const step of skill.steps) {
+                const stepDesc = step.skill ? `skill=${step.skill}` : `type=${step.type || 'unknown'}`;
+                lines.push(`  - ${step.id}: ${stepDesc}`);
+            }
+        }
+        // pipeline 类型：stages 概要
+        if (skill.type === 'pipeline' && skill.stages && skill.stages.length > 0) {
+            lines.push(`- Stages (${skill.stages.length}):`);
+            for (const stage of skill.stages) {
+                const skills = stage.skills?.join(', ') || 'none';
+                lines.push(`  - ${stage.id} (${stage.name}): skills=[${skills}]`);
+            }
+        }
+        // diagnostic 类型：rules 概要
+        if (skill.type === 'diagnostic' && skill.diagnosticRules && skill.diagnosticRules.length > 0) {
+            lines.push(`- Diagnostic Rules (${skill.diagnosticRules.length}):`);
+            for (const rule of skill.diagnosticRules) {
+                lines.push(`  - ${rule.id} (${rule.severity}): ${rule.name}`);
+            }
+        }
+        const formatted = lines.join('\n');
+        logger.debug('Skill formatted for prompt', {
+            skillId,
+            formattedLength: formatted.length,
+        });
+        return formatted;
+    }
     // ============= 各类型 Skill 执行方法 =============
     /**
      * 执行 SQL 查询类型 Skill

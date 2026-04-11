@@ -209,6 +209,11 @@ class OpenAIProvider {
         this.model = model;
         this.maxTokens = maxTokens;
         this.baseUrl = baseUrl;
+        logger.info('OpenAI provider initialized', {
+            model: this.model,
+            baseUrl: this.baseUrl,
+            maxTokens: this.maxTokens,
+        });
     }
     async *chat(request) {
         const messages = this.buildMessages(request);
@@ -217,6 +222,7 @@ class OpenAIProvider {
             max_tokens: request.maxTokens ?? this.maxTokens,
             messages,
             stream: true,
+            stream_options: { include_usage: true },
         };
         if (request.temperature !== undefined) {
             body.temperature = request.temperature;
@@ -231,6 +237,12 @@ class OpenAIProvider {
                 },
             }));
         }
+        logger.debug('OpenAI API request', {
+            url: `${this.baseUrl}/chat/completions`,
+            model: this.model,
+            messageCount: messages.length,
+            hasTools: !!(request.tools && request.tools.length > 0),
+        });
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {

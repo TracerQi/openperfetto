@@ -2,6 +2,8 @@
  * OpenPerfetto Backend Service
  * Fastify 服务入口
  */
+// 在所有其他 import 之前加载 .env 文件
+import 'dotenv/config';
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';

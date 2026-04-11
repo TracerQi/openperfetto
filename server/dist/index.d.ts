@@ -2,6 +2,7 @@
  * OpenPerfetto Backend Service
  * Fastify 服务入口
  */
+import 'dotenv/config';
 declare module 'fastify' {
     interface FastifyRequest {
         traceId: string;
@@ -9,5 +10,4 @@ declare module 'fastify' {
         agentId?: string;
     }
 }
-export {};
 //# sourceMappingURL=index.d.ts.map

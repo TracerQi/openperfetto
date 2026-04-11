@@ -53,6 +53,13 @@ export declare class SkillProcessor {
      */
     private sanitizeParameter;
     /**
+     * 格式化 Skill 定义为 LLM 可理解的 Prompt 文本
+     * @param skillId Skill ID
+     * @param params 可选参数（用于日志）
+     * @returns 格式化的 Markdown 文本，Skill 不存在时返回 null
+     */
+    formatSkillForPrompt(skillId: string, params?: Record<string, unknown>): Promise<string | null>;
+    /**
      * 执行 SQL 查询类型 Skill
      */
     private executeSqlQuery;

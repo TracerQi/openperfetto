@@ -49,6 +49,12 @@ export declare class SkillMarkerParser {
      */
     replace(text: string, replacer: (marker: SkillMarker) => string): string;
     /**
+     * 异步替换文本中的 Skill 标记
+     * @param text 原始文本
+     * @param replacer 异步替换函数，接收 SkillMarker 返回替换文本的 Promise
+     */
+    replaceAsync(text: string, replacer: (marker: SkillMarker) => Promise<string>): Promise<string>;
+    /**
      * 检查文本是否包含 Skill 标记
      */
     hasMarkers(text: string): boolean;
