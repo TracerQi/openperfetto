@@ -360,12 +360,20 @@ export class SkillProcessor {
       }
     }
     
-    // SQL 模板
+    // SQL 模板（智能截断：保留关键结构信息）
     if (skill.sqlTemplate) {
-      const sql = skill.sqlTemplate.length > 500
-        ? skill.sqlTemplate.substring(0, 500) + '...'
-        : skill.sqlTemplate;
+      const sql = this.truncateSqlTemplate(skill.sqlTemplate, 1500);
       lines.push(`- SQL Template: ${sql.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`);
+    }
+    
+    // 前置依赖信息
+    if (skill.prerequisites) {
+      if (skill.prerequisites.description) {
+        lines.push(`- Prerequisites: ${skill.prerequisites.description}`);
+      }
+      if (skill.prerequisites.dependsOn && skill.prerequisites.dependsOn.length > 0) {
+        lines.push(`- Depends On: ${skill.prerequisites.dependsOn.join(', ')}`);
+      }
     }
     
     // 输出列定义
@@ -410,6 +418,45 @@ export class SkillProcessor {
     });
     
     return formatted;
+  }
+
+  /**
+   * 智能截断 SQL 模板
+   * 优先保留 SELECT 输出列 + JOIN 关系 + WHERE 条件，隐藏 CTE 内部逻辑
+   */
+  private truncateSqlTemplate(sql: string, maxLength: number): string {
+    if (sql.length <= maxLength) {
+      return sql;
+    }
+
+    // 策略：对于包含 CTE (WITH ... AS) 的 SQL，
+    // 保留外层 SELECT 和 CTE 的 JOIN/WHERE 部分
+    const cteMatch = sql.match(/WITH\s+\w+\s+AS\s*\(([\s\S]*?)\)\s*(SELECT[\s\S]*)/i);
+
+    if (cteMatch) {
+      const cteBody = cteMatch[1];
+      const outerSelect = cteMatch[2];
+
+      // 从 CTE body 中提取 JOIN 和 WHERE（关键结构信息）
+      const joinLines = cteBody.match(/JOIN\s+.+/gi) || [];
+      const whereLines = cteBody.match(/WHERE\s+[\s\S]*?(?=\)|$)/i) || [];
+
+      const skeleton = [
+        'WITH ... AS (',
+        '  SELECT ... FROM slice s',
+        ...joinLines.map(j => '  ' + j.trim()),
+        ...whereLines.map(w => '  ' + w.trim()),
+        ')',
+        outerSelect.trim(),
+      ].join('\n');
+
+      if (skeleton.length <= maxLength) {
+        return skeleton;
+      }
+    }
+
+    // 回退：简单截断到 maxLength
+    return sql.substring(0, maxLength) + '...';
   }
 
   // ============= 各类型 Skill 执行方法 =============

@@ -199,6 +199,12 @@ export const SkillDefinitionSchema = z.object({
   // 输出模式
   outputSchema: OutputSchemaSchema.optional(),
   
+  // 前置依赖定义
+  prerequisites: z.object({
+    description: z.string().optional(),
+    dependsOn: z.array(z.string()).default([]),
+  }).optional(),
+
   // 关联信息
   relatedSkills: z.array(z.string()).default([]),
   relatedTools: z.array(z.string()).default([]),

@@ -18,7 +18,7 @@ parameters:
   - name: package_name
     type: string
     required: true
-    description: "应用包名"
+    description: "应用的完整 Android 包名，例如 com.android.settings。不要使用应用简称。"
   - name: min_dur_ms
     type: float
     required: false
@@ -29,6 +29,11 @@ parameters:
     required: false
     default: 50
     description: "返回结果数量限制"
+
+prerequisites:
+  description: "建议先调用 app_startup_breakdown 获取启动概览，再使用此技能深入分析阻塞调用"
+  depends_on:
+    - app_startup_breakdown
 
 sql_template: |
   SELECT

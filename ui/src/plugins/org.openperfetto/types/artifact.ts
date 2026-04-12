@@ -68,6 +68,9 @@ export interface ArtifactSummary {
 
   /** 自动识别的洞察 */
   insights?: string[];
+
+  /** 数据是否经过采样（true=采样后的子集，false=完整数据） */
+  isSampled?: boolean;
 }
 
 export interface NumericStats {

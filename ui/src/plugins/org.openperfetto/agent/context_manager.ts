@@ -247,7 +247,10 @@ export class ContextManager {
     // 3. Trace 元数据摘要
     parts.push(await this.getTraceMetadataPrompt());
 
-    // 4. 注入场景相关 Skill 标记（后端将融合完整 Skill 内容）
+    // 4. Perfetto 核心表 Schema 摘要（供 execute_sql 使用）
+    parts.push(this.getCoreTableSchemaPrompt());
+
+    // 5. 注入场景相关 Skill 标记（后端将融合完整 Skill 内容）
     const skillMarkers = this.getSkillMarkersForScene(sceneType);
     if (skillMarkers) {
       parts.push(skillMarkers);
@@ -364,7 +367,21 @@ export class ContextManager {
 - high_load: CPU 高负载问题，CPU 占用高、计算密集
 - screen_on_off: 亮灭屏问题
 - unlock: 解锁性能问题
-- general: 通用性能分析`;
+- general: 通用性能分析
+
+## 工具调用规则
+
+1. **SQL 查询前必须确认表结构**：如果你不确定某个表的列名，先使用 lookup_sql_schema 工具查询，不要猜测列名。
+2. **参数规范**：package_name 参数必须使用 Android 完整包名格式（如 com.android.settings），不要使用应用简称。
+3. **避免重复调用**：同一个 Skill 或 SQL 不要用不同参数调用第二次（除非第一次返回了明确的错误提示需要修正参数）。如果已获得结果，直接使用该结果。
+4. **工具调用顺序**：优先使用 invoke_skill 调用预定义技能获取结构化数据，当预定义技能不能满足需求时才使用 execute_sql 自定义查询。
+5. **每次工具调用后**：先分析返回的数据，判断是否需要更多数据，再决定下一步调用。不要一次性规划所有调用。
+
+## 参数使用规范
+
+- package_name: 必须使用完整的 Android 包名（如 com.android.settings），不要使用缩写或简称（如 settings）
+- 如果用户提到的应用名称不是完整包名，你应该先推断出完整包名再调用工具
+- 常见应用映射：Settings → com.android.settings, Chrome → com.android.chrome, Phone → com.android.dialer, Camera → com.android.camera2, Calendar → com.android.calendar`;
   }
 
   /**
@@ -410,10 +427,14 @@ export class ContextManager {
 - Time to Full Display (TTFD)
 - 阻塞调用分解
 
-推荐工具:
-- invoke_skill(cold_startup_analysis)
-- trace_process_flow 用于启动序列
-- execute_sql 用于进程生命周期事件
+推荐工具调用顺序:
+1. invoke_skill(app_startup_breakdown, {package_name: "完整包名"}) — 获取启动阶段拆解
+2. invoke_skill(startup_blocking_calls, {package_name: "完整包名"}) — 获取阻塞调用列表
+3. execute_sql — 仅在需要补充细节时使用自定义查询
+
+注意：
+- 第2步依赖第1步的结果来确认启动过程是否正常
+- package_name 必须使用完整 Android 包名（如 com.android.settings）
 
 推荐阶段 ID（提交计划时请使用这些 ID）:
 - process_creation: 进程创建分析
@@ -583,6 +604,51 @@ export class ContextManager {
     };
 
     return strategies[sceneType] || strategies.general;
+  }
+
+  /**
+   * Perfetto 核心表 Schema 摘要（硬编码，非动态查询）
+   * 供 LLM 编写 execute_sql 时参考，避免列名/JOIN 路径错误
+   */
+  private getCoreTableSchemaPrompt(): string {
+    return `# Perfetto 核心表结构（供 execute_sql 使用）
+
+以下是 Perfetto trace 数据库的核心表结构。编写 SQL 时必须使用正确的列名和 JOIN 路径。
+
+## 核心表
+
+| 表名 | 主要列 |
+|------|--------|
+| process | upid(int, PK), pid(int), name(string) |
+| thread | utid(int, PK), upid(int→process), tid(int), name(string), is_main_thread(int) |
+| thread_track | id(int, PK), utid(int→thread) |
+| slice | id(int, PK), ts(int64, ns), dur(int64, ns), name(string), track_id(int→thread_track), depth(int), parent_id(int) |
+| counter_track | id(int, PK), name(string), utid(int) |
+| counter | id(int, PK), track_id(int→counter_track), ts(int64, ns), value(real) |
+| actual_frame_timeline_slice | ts(int64), dur(int64), name(string), upid(int), jank_type(string) |
+
+## 常用 JOIN 路径
+
+${'```'}
+slice → thread_track (track_id = id) → thread (utid = utid) → process (upid = upid)
+${'```'}
+
+示例：查询某进程主线程上的 slice：
+${'```sql'}
+SELECT s.name, s.dur
+FROM slice s
+JOIN thread_track tt ON s.track_id = tt.id
+JOIN thread t ON tt.utid = t.utid
+JOIN process p ON t.upid = p.upid
+WHERE p.name LIKE '%com.example.app%'
+  AND t.is_main_thread = 1
+${'```'}
+
+## 注意事项
+- slice 表没有 upid 列，不能直接写 s.upid
+- thread 表的列名是 name，不是 thread_name
+- 使用别名时注意区分：s.name(slice名)、t.name(线程名)、p.name(进程名)
+- 时间单位：ts 和 dur 均为纳秒(ns)，如需毫秒请除以 1e6`;
   }
 
   /**

@@ -18,7 +18,7 @@ parameters:
   - name: package_name
     type: string
     required: true
-    description: "应用包名"
+    description: "应用的完整 Android 包名，例如 com.android.settings。不要使用应用简称。"
   - name: time_range_start
     type: integer
     required: false
@@ -27,6 +27,11 @@ parameters:
     type: integer
     required: false
     description: "分析结束时间（纳秒）"
+
+prerequisites:
+  description: "建议先调用 app_startup_breakdown 获取启动概览，再使用此技能分析 CPU 使用情况"
+  depends_on:
+    - app_startup_breakdown
 
 sql_template: |
   SELECT

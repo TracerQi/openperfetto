@@ -158,6 +158,9 @@ export class ArtifactStore {
     // 使用分位数采样 + 极值保留策略
     summary.sampleRows = this.getQuantileSampledRows(data);
 
+    // 标记数据是否经过采样
+    summary.isSampled = data.rows.length > 50;
+
     // 自动生成洞察
     summary.insights = this.generateInsights(data, numericStats, stringStats);
 
@@ -245,8 +248,8 @@ export class ArtifactStore {
    */
   private getQuantileSampledRows(data: ArtifactData): unknown[][] {
     const rows = data.rows;
-    if (rows.length <= 20) {
-      return rows; // 数据量小，全部返回
+    if (rows.length <= 50) {
+      return rows; // 50行以下全部返回，避免启动分析等场景丢失关键数据
     }
 
     // 找到第一个数值列用于排序
@@ -290,8 +293,8 @@ export class ArtifactStore {
       }
     }
 
-    // 3. 分位数采样点
-    const percentiles = [25, 50, 75, 90, 95];
+    // 3. 分位数采样点（增加 P10/P40/P60 以更均匀覆盖分布）
+    const percentiles = [10, 25, 40, 50, 60, 75, 90, 95];
     for (const p of percentiles) {
       const idx = Math.floor((p / 100) * (sortedRows.length - 1));
       if (!addedIndices.has(idx)) {
@@ -399,6 +402,12 @@ export class ArtifactStore {
     lines.push(`类型: ${artifact.type}`);
     lines.push(`行数: ${s.rowCount}`);
     lines.push(`来源: ${artifact.sourceTool}`);
+
+    if (s.isSampled) {
+      lines.push(`注意：以下为采样数据摘要（完整数据共 ${s.rowCount} 行，可通过 fetch_artifact 分页获取完整数据）`);
+    } else {
+      lines.push(`以下为完整数据（共 ${s.rowCount} 行）`);
+    }
 
     if (s.numericStats) {
       lines.push('');

@@ -16,7 +16,7 @@
  * Verifier Module - 三层验证系统
  *
  * 实现 OpenPerfetto 的验证框架，确保 AI 分析结论的准确性：
- * - L1: 启发式规则验证（20条规则）
+ * - L1: 启发式规则验证（23条规则）
  * - L2: 计划遵从验证（检查是否执行了计划中的阶段）
  * - L3: LLM 审查（预留接口，可选注入）
  *
@@ -846,26 +846,235 @@ const rule_single_frame_overmark: L1Rule = {
   },
 };
 
+/**
+ * 规则 21: unit_consistency - 时间值单位一致性检查
+ * 检测同一段落中混用不同时间单位且未做换算说明，
+ * 以及纳秒级时间戳被错误展示为毫秒的情况。
+ */
+const rule_unit_consistency: L1Rule = {
+  id: 'L1-021',
+  name: 'unit_consistency',
+  category: 'assertion',
+  check: (messages: ChatMessage[], _artifacts: Artifact[]): string | null => {
+    const content = getAllMessageContent(messages);
+
+    // 1. 检查超大毫秒值（可能是未换算的纳秒）
+    const msMatches = Array.from(content.matchAll(/(\d+(?:\.\d+)?)\s*ms/g));
+    for (const match of msMatches) {
+      const value = parseFloat(match[1]);
+      // >1,000,000ms 很可能是未换算的纳秒值（1e6 ms = 1000s ≈ 16.7min）
+      if (value > 1_000_000) {
+        return `检测到可能未换算的时间值: ${match[0]}（>1,000,000ms，可能是纳秒未转换）`;
+      }
+    }
+
+    // 2. 检查同一段落中是否混用不同时间单位且未做换算说明
+    const paragraphs = content.split(/\n\s*\n/);
+    for (const paragraph of paragraphs) {
+      const timeUnits = new Set<string>();
+      const unitPattern = /\d+\.?\d*\s*(ns|us|ms|s|min)/gi;
+      const unitMatches = Array.from(paragraph.matchAll(unitPattern));
+
+      for (const m of unitMatches) {
+        timeUnits.add(m[1].toLowerCase());
+      }
+
+      // 如果同一段落中有 3 种以上不同时间单位，且没有换算说明
+      if (timeUnits.size >= 3) {
+        const hasConversionNote =
+          /换算|转换|相当于|equivalent|equals|=\s*\d/i.test(paragraph);
+        if (!hasConversionNote) {
+          return `同一段落中混用了 ${timeUnits.size} 种时间单位 (${Array.from(timeUnits).join(', ')})，未提供换算说明`;
+        }
+      }
+    }
+
+    // 3. 检查纳秒级时间戳（>1e12）是否被错误展示为毫秒
+    const largeNumMatches = Array.from(
+      content.matchAll(/(\d{13,})\s*ms/g),
+    );
+    for (const match of largeNumMatches) {
+      const value = parseFloat(match[1]);
+      if (value > 1e12) {
+        return `检测到疑似纳秒时间戳被标注为毫秒: ${match[0]}`;
+      }
+    }
+
+    return null;
+  },
+};
+
+/**
+ * 规则 22: aggregation_completeness - 百分比声明聚合完整性检查
+ * 检测 AI 输出中的百分比声明是否可能基于不完整数据。
+ *
+ * 简化实现：
+ * - 检测“占 X% 的时间/耗时”模式
+ * - 如果百分比 > 30% 但同一段落只引用了单个操作名（而非类别汇总），产生警告
+ * - 特别关注采样数据上的百分比计算
+ */
+const rule_aggregation_completeness: L1Rule = {
+  id: 'L1-022',
+  name: 'aggregation_completeness',
+  category: 'assertion',
+  check: (messages: ChatMessage[], artifacts: Artifact[]): string | null => {
+    const content = getAllMessageContent(messages);
+
+    // 匹配百分比声明模式：
+    //   "占 56% 的时间" / "56% 的耗时" / "占主线程 56%" / "accounts for 56%"
+    const percentPatterns = [
+      /占\s*(?:了\s*)?(\d+(?:\.\d+)?)\s*%\s*(?:的\s*)?(?:时间|耗时|cpu|主线程)/gi,
+      /(\d+(?:\.\d+)?)\s*%\s*(?:的\s*)?(?:时间|耗时|主线程时间|cpu时间)/gi,
+      /accounts?\s*for\s*(\d+(?:\.\d+)?)\s*%/gi,
+      /(\d+(?:\.\d+)?)\s*%\s*of\s*(?:the\s*)?(?:time|main\s*thread|cpu)/gi,
+    ];
+
+    for (const pattern of percentPatterns) {
+      const matches = Array.from(content.matchAll(pattern));
+      for (const match of matches) {
+        const percentage = parseFloat(match[1]);
+        if (percentage <= 30) continue; // 低百分比不检查
+
+        // 找到该百分比所在的段落
+        const matchIdx = match.index ?? 0;
+        const paragraphStart = content.lastIndexOf('\n\n', matchIdx);
+        const paragraphEnd = content.indexOf('\n\n', matchIdx);
+        const paragraph = content.slice(
+          paragraphStart >= 0 ? paragraphStart : 0,
+          paragraphEnd >= 0 ? paragraphEnd : content.length,
+        );
+
+        // 检查段落中是否有汇总/聚合说明
+        const hasAggregationNote =
+          /汇总|总计|合计|所有.*操作|全部|类别|category|total|sum|all\s*operations|aggregat/i.test(
+            paragraph,
+          );
+
+        if (hasAggregationNote) continue; // 有聚合说明，通过
+
+        // 检查是否有对应的采样 artifact
+        const hasSampledArtifact = artifacts.some(
+          (a) => a.summary.isSampled === true,
+        );
+
+        // 检查段落是否引用了具体数据源
+        const hasDataRef =
+          /artifact|art_\d+|fetch_artifact|查询结果|数据显示/i.test(paragraph);
+
+        // 高百分比 + 无聚合说明 + (有采样数据 或 无数据引用) => 警告
+        if (hasSampledArtifact || !hasDataRef) {
+          return (
+            `百分比声明 "${percentage}%" 可能基于不完整数据: ` +
+            `未发现聚合/汇总说明` +
+            (hasSampledArtifact ? '，且存在采样数据（部分行可能被省略）' : '')
+          );
+        }
+      }
+    }
+    return null;
+  },
+};
+
+/**
+ * 规则 23: artifact_conclusion_consistency - AI 结论与 Artifact 数据一致性
+ * 提取 AI 最终结论中的数值（毫秒值、百分比），与 Artifact 中的原始数据交叉验证。
+ * 如果数值偏差超过 10%，标记为不一致。
+ */
+const rule_artifact_conclusion_consistency: L1Rule = {
+  id: 'L1-023',
+  name: 'artifact_conclusion_consistency',
+  category: 'data_integrity',
+  check: (messages: ChatMessage[], artifacts: Artifact[]): string | null => {
+    if (artifacts.length === 0) return null;
+
+    // 获取最后一条 assistant 消息作为“结论”
+    const assistantMsgs = messages.filter((m) => m.role === 'assistant');
+    if (assistantMsgs.length === 0) return null;
+    const conclusion = assistantMsgs[assistantMsgs.length - 1].content.toLowerCase();
+
+    // 提取结论中的毫秒值声明：如 "耗时 123.4ms" / "took 123.4ms"
+    const msClaimsInConclusion = Array.from(
+      conclusion.matchAll(/(\d+(?:\.\d+)?)\s*ms/g),
+    );
+
+    for (const claim of msClaimsInConclusion) {
+      const claimedValue = parseFloat(claim[1]);
+      if (claimedValue <= 0) continue;
+
+      // 在所有 artifact 的数值统计中查找相近值
+      for (const artifact of artifacts) {
+        const stats = artifact.summary.numericStats;
+        if (!stats) continue;
+
+        for (const [colName, colStats] of Object.entries(stats)) {
+          // 检查列名是否与时间/持续时间相关
+          const isTimeCol =
+            /dur|time|latency|delay|耗时|延迟/i.test(colName);
+          if (!isTimeCol) continue;
+
+          // 对比关键统计值（max, avg, p50, p90, p95, p99）
+          const referenceValues = [
+            {label: 'max', val: colStats.max},
+            {label: 'avg', val: colStats.avg},
+            {label: 'P50', val: colStats.p50},
+            {label: 'P90', val: colStats.p90},
+            {label: 'P95', val: colStats.p95},
+            {label: 'P99', val: colStats.p99},
+          ];
+
+          for (const ref of referenceValues) {
+            if (ref.val <= 0) continue;
+            const deviation = Math.abs(claimedValue - ref.val) / ref.val;
+
+            // 如果声称的值与某个统计量接近（偏差 < 50%）但超过 10%，
+            // 说明可能引用了该统计量但数值不准确
+            if (deviation > 0.1 && deviation < 0.5) {
+              // 进一步确认：声称的值是否“大致对应”某个统计量
+              // 通过检查结论中是否提到相关列名或统计量名
+              const colNameLower = colName.toLowerCase();
+              if (
+                conclusion.includes(colNameLower) ||
+                conclusion.includes(ref.label.toLowerCase())
+              ) {
+                return (
+                  `结论中数值 ${claimedValue}ms 与 Artifact ${artifact.id} ` +
+                  `的 ${colName}.${ref.label} (${ref.val.toFixed(2)}) ` +
+                  `偏差 ${(deviation * 100).toFixed(1)}%（超过 10% 阈值）`
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  },
+};
+
 // ============================================================================
 // 所有 L1 规则
 // ============================================================================
 
 const ALL_L1_RULES: L1Rule[] = [
-  // 数据完整性规则 (3)
+  // 数据完整性规则 (4) — 新增 artifact_conclusion_consistency
   rule_timestamp_monotonic,
   rule_thread_existence,
   rule_process_state_consistency,
+  rule_artifact_conclusion_consistency,
   // 性能指标规则 (5)
   rule_cpu_freq_anomaly,
   rule_gc_pause_anomaly,
   rule_main_thread_io,
   rule_binder_latency,
   rule_syscall_load,
-  // 断言验证规则 (4)
+  // 断言验证规则 (6) — 新增 unit_consistency, aggregation_completeness
   rule_vsync_offset,
   rule_empty_result_assertion,
   rule_numeric_sanity,
   rule_buffer_stuffing,
+  rule_unit_consistency,
+  rule_aggregation_completeness,
   // 因果关系规则 (3)
   rule_unsupported_root_cause,
   rule_anr_cause_unclear,
@@ -888,7 +1097,7 @@ const ALL_L1_RULES: L1Rule[] = [
  * 三层验证器
  *
  * 验证 AI 分析结论的准确性：
- * - L1: 20条启发式规则
+ * - L1: 23条启发式规则
  * - L2: 计划遵从验证
  * - L3: LLM 审查（可选）
  */

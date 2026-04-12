@@ -19,11 +19,15 @@ parameters:
   - name: package_name
     type: string
     required: true
-    description: "应用包名"
+    description: "应用的完整 Android 包名，例如 com.android.settings。不要使用应用简称。"
   - name: time_range_start
     type: integer
     required: false
     description: "分析起始时间（纳秒）"
+
+prerequisites:
+  description: "这是启动分析的入口技能，应最先调用"
+  depends_on: []
 
 sql_template: |
   WITH startup_slices AS (

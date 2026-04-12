@@ -719,6 +719,10 @@ export class AgentLoop {
             await this.executeToolCall(event.toolCall);
           }
         } else {
+          // 刷新流式缓冲区，确保 AI 文本在工具调用消息之前渲染到 UI
+          // 防止双重防抖（LLMStreamHandler 100ms + AgentLoop 100ms）导致工具消息插入文本中间
+          this.flushStreamBuffer();
+
           this.state = AgentLoopState.EXECUTING_TOOL;
           this.pendingToolCalls.set(event.toolCall.id, event.toolCall);
           this.updateProgress(`执行工具: ${event.toolCall.name}`);
@@ -865,6 +869,8 @@ export class AgentLoop {
           });
           this.finalizeAnalysis();
         } else {
+          // 防御性 flush：确保流式文本在系统消息之前完成渲染
+          this.flushStreamBuffer();
           // 添加验证问题消息，返回 AWAITING_LLM 重新请求
           this.addMessage({
             id: `verify_fail_${Date.now()}`,
@@ -1206,6 +1212,7 @@ export class AgentLoop {
     // Level 1: 3分钟首次提醒
     if (elapsed > AgentLoop.DURATION_WARN_LEVEL1 && !this.durationWarnLevel1Fired) {
       this.durationWarnLevel1Fired = true;
+      this.flushStreamBuffer();
       const seconds = Math.round(elapsed / 1000);
       this.addMessage({
         id: `duration_warn1_${Date.now()}`,
@@ -1220,6 +1227,7 @@ export class AgentLoop {
     // Level 2: 5分钟再次提醒
     if (elapsed > AgentLoop.DURATION_WARN_LEVEL2 && !this.durationWarnLevel2Fired) {
       this.durationWarnLevel2Fired = true;
+      this.flushStreamBuffer();
       const seconds = Math.round(elapsed / 1000);
       this.addMessage({
         id: `duration_warn2_${Date.now()}`,
@@ -1233,6 +1241,7 @@ export class AgentLoop {
 
     // 硬超时：7分钟强制终止
     if (elapsed > AgentLoop.MAX_DURATION_MS) {
+      this.flushStreamBuffer();
       this.state = AgentLoopState.ERROR;
       const seconds = Math.round(elapsed / 1000);
       this.addMessage({

@@ -142,6 +142,9 @@ export class PlanningGate {
       );
     }
 
+    // 5. 检查 package_name 参数是否使用完整包名格式 — 软性
+    this.checkPackageNameFormat(plan, softWarnings);
+
     const issues = [...hardIssues, ...softWarnings];
     return {
       valid: hardIssues.length === 0,  // 只有硬性问题才影响 valid
@@ -466,6 +469,41 @@ export class PlanningGate {
     };
 
     return templates[sceneType] || this.createGenericTemplate(sceneType);
+  }
+
+  /**
+   * 检查计划中涉及的 package_name 参数是否使用完整包名格式
+   * 完整包名格式：至少包含一个点号，如 com.android.settings
+   */
+  private checkPackageNameFormat(
+    plan: AnalysisPlan,
+    softWarnings: string[],
+  ): void {
+    // 仅检查 startup 相关场景
+    const startupScenes: SceneType[] = [
+      'startup_cold',
+      'startup_warm',
+      'startup_hot',
+    ];
+
+    if (!startupScenes.includes(plan.sceneType)) {
+      return;
+    }
+
+    // 从计划的阶段描述中提取可能的包名引用
+    for (const phase of plan.phases) {
+      const text = `${phase.description || ''} ${phase.name || ''}`;
+      // 匹配看起来像短名称的模式（常见应用简称）
+      const shortNamePattern =
+        /\b(?:settings|chrome|phone|camera|calendar|dialer|messages|contacts|clock|calculator)\b/i;
+      const match = text.match(shortNamePattern);
+      if (match) {
+        softWarnings.push(
+          `阶段 "${phase.name}" 中引用了应用简称 "${match[0]}"，` +
+          `建议使用完整 Android 包名格式（如 com.android.settings）`,
+        );
+      }
+    }
   }
 
   private createGenericTemplate(sceneType: SceneType): AnalysisPlan {
