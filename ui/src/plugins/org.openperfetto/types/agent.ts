@@ -88,3 +88,74 @@ export interface AnalysisPhase {
   expectedOutputs: string[];
   completed: boolean;
 }
+
+// ============================================================================
+// SPEC-04: 验证-修正结构化闭环 类型定义
+// ============================================================================
+
+/**
+ * 修正动作类型
+ */
+export type FixAction =
+  | 'RE_EXECUTE_SKILL'        // 重新执行某个 Skill
+  | 'MODIFY_SQL_ORDER_BY'     // 修改 SQL 的 ORDER BY 子句
+  | 'SKIP_VALIDATION_RULE'    // 跳过不适用的验证规则
+  | 'CHANGE_PARAMETER'        // 修改工具调用参数
+  | 'MANUAL_FIX_REQUIRED';    // 需要 LLM 手动修正
+
+/**
+ * 结构化验证失败信息
+ */
+export interface ValidationFailure {
+  /** 触发失败的规则 ID，如 'timestamp_monotonic' */
+  ruleId: string;
+
+  /** 关联的 Artifact ID（可选，若验证与特定 Artifact 相关） */
+  artifactId: string;
+
+  /** 严重程度 */
+  severity: 'error' | 'warning';
+
+  /** 人类可读的问题描述（兼容现有 l1Issues 的字符串） */
+  description: string;
+
+  /** 结构化修正指引 */
+  fixGuidance: {
+    /** 建议的修正动作 */
+    action: FixAction;
+    /** 需要重新执行的 Skill ID（仅 RE_EXECUTE_SKILL 时有效） */
+    targetSkillId?: string;
+    /** 建议的参数修改（仅 CHANGE_PARAMETER / RE_EXECUTE_SKILL 时有效） */
+    suggestedParams?: Record<string, unknown>;
+    /** 是否支持自动修正（AutoFixer 可处理） */
+    autoFixAvailable: boolean;
+    /** 修正原因说明（注入 LLM 上下文时使用） */
+    reason?: string;
+  };
+
+  /** 诊断详情，帮助 LLM 理解问题根因 */
+  diagnostics: {
+    /** 实际值 */
+    actualValue?: string | number;
+    /** 期望值 */
+    expectedValue?: string | number;
+    /** 受影响的数据行范围 */
+    affectedRows?: number;
+    /** 相关的 SQL 子句 */
+    relevantSqlClause?: string;
+  };
+}
+
+/**
+ * 自动修正结果
+ */
+export interface AutoFixResult {
+  /** 是否修正成功 */
+  success: boolean;
+  /** 修正动作描述 */
+  actionTaken: string;
+  /** 修正后是否需要重新验证 */
+  requiresRevalidation: boolean;
+  /** 失败原因（success=false 时） */
+  failureReason?: string;
+}

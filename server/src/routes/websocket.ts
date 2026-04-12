@@ -46,6 +46,87 @@ export function setWebSocketDependencies(deps: WebSocketDependencies): void {
   logger.info('WebSocket dependencies configured');
 }
 
+// ============= 消息缓冲队列 =============
+
+class MessageQueue {
+  private queue: Array<{
+    message: ServerMessage;
+    priority: MessagePriority;
+    timestamp: number;
+  }> = [];
+  private readonly maxSize = 500;
+
+  /**
+   * 入队消息。
+   * 队满时淘汰最旧的低优先级消息。
+   * @returns true 表示成功入队，false 表示队列满且无法淘汰（全是 HIGH）
+   */
+  enqueue(message: ServerMessage, priority: MessagePriority): boolean {
+    if (this.queue.length >= this.maxSize) {
+      // 找到最旧的、优先级最低的消息进行淘汰
+      const evictIndex = this.findEvictCandidate(priority);
+      if (evictIndex === -1) {
+        return false; // 无法淘汰，队列中全是同等或更高优先级
+      }
+      this.queue.splice(evictIndex, 1);
+    }
+    this.queue.push({ message, priority, timestamp: Date.now() });
+    return true;
+  }
+
+  /**
+   * 出队（FIFO）
+   */
+  dequeue(): { message: ServerMessage; priority: MessagePriority } | null {
+    const item = this.queue.shift();
+    return item ? { message: item.message, priority: item.priority } : null;
+  }
+
+  /**
+   * 尝试发送队列中的所有消息
+   * @returns 成功发送的消息数
+   */
+  drain(socket: WebSocket): number {
+    const wsConfig = getConfig().websocket;
+    let sent = 0;
+    while (this.queue.length > 0) {
+      if (socket.readyState !== WebSocket.OPEN) break;
+      if (socket.bufferedAmount > wsConfig.maxBufferedAmount) break;
+      const item = this.dequeue();
+      if (!item) break;
+      socket.send(JSON.stringify(item.message));
+      sent++;
+    }
+    return sent;
+  }
+
+  get size(): number {
+    return this.queue.length;
+  }
+
+  /**
+   * 查找可淘汰的消息索引：优先淘汰优先级低于 incomingPriority 的最旧消息
+   */
+  private findEvictCandidate(incomingPriority: MessagePriority): number {
+    let candidateIndex = -1;
+    let candidatePriority = incomingPriority;
+
+    for (let i = 0; i < this.queue.length; i++) {
+      if (this.queue[i].priority < candidatePriority) {
+        candidatePriority = this.queue[i].priority;
+        candidateIndex = i;
+      } else if (
+        this.queue[i].priority === candidatePriority &&
+        candidateIndex === -1
+      ) {
+        candidateIndex = i;
+      }
+    }
+
+    return candidateIndex;
+  }
+}
+
 // ============= 连接信息 =============
 
 interface ConnectionInfo {
@@ -56,6 +137,7 @@ interface ConnectionInfo {
   createdAt: number;
   lastPongAt: number;
   state: 'connecting' | 'connected' | 'active' | 'closing' | 'closed';
+  messageQueue: MessageQueue;
 }
 
 // ============= 连接池 =============
@@ -97,6 +179,7 @@ class ConnectionPool {
       createdAt: now,
       lastPongAt: now,
       state: 'connecting',
+      messageQueue: new MessageQueue(),
     };
     
     this.connections.set(connectionId, info);
@@ -315,15 +398,37 @@ function sendMessage(info: ConnectionInfo, message: ServerMessage): boolean {
   if (socket.bufferedAmount > config.maxBufferedAmount) {
     const priority = getMessagePriority(message);
     
-    // 高优先级消息（error）仍然发送
-    if (priority !== MessagePriority.HIGH) {
-      logger.warn('Backpressure detected, message dropped', {
+    // HIGH 优先级消息仍然尝试立即发送
+    if (priority === MessagePriority.HIGH) {
+      try {
+        socket.send(JSON.stringify(message));
+        return true;
+      } catch (err) {
+        logger.error('Error sending HIGH priority message', err as Error, {
+          connectionId: info.id,
+          messageType: message.type,
+        });
+        return false;
+      }
+    }
+    
+    // 非 HIGH 消息入队缓冲，不再直接丢弃
+    const enqueued = info.messageQueue.enqueue(message, priority);
+    if (!enqueued) {
+      logger.warn('Message queue full, message dropped', {
         connectionId: info.id,
-        bufferedAmount: socket.bufferedAmount,
-        messageType: message.type,
+        priority,
+        queueSize: info.messageQueue.size,
       });
       return false;
     }
+    
+    logger.debug('Backpressure detected, message queued', {
+      connectionId: info.id,
+      priority,
+      queueSize: info.messageQueue.size,
+    });
+    return true;
   }
   
   try {
@@ -823,6 +928,17 @@ export function setupWebSocketRoutes(server: FastifyInstance): void {
     info.state = 'connected';
     loggerWithTrace.info('WebSocket connected', { connectionId: info.id });
     
+    // 启动 drain 定时器：定期尝试清空消息缓冲队列
+    const DRAIN_INTERVAL_MS = 200;
+    const drainTimer = setInterval(() => {
+      if (info.messageQueue.size > 0 && socket.readyState === WebSocket.OPEN) {
+        const sent = info.messageQueue.drain(socket);
+        if (sent > 0) {
+          logger.debug(`Drained ${sent} queued messages`, { connectionId: info.id });
+        }
+      }
+    }, DRAIN_INTERVAL_MS);
+    
     // 消息处理
     socket.on('message', (rawData: Buffer) => {
       const message = rawData.toString('utf8');
@@ -833,6 +949,7 @@ export function setupWebSocketRoutes(server: FastifyInstance): void {
     
     // 连接关闭
     socket.on('close', (code: number, reason: Buffer) => {
+      clearInterval(drainTimer);
       loggerWithTrace.info('WebSocket closed', {
         connectionId: info.id,
         code,
@@ -843,6 +960,7 @@ export function setupWebSocketRoutes(server: FastifyInstance): void {
     
     // 错误处理
     socket.on('error', (err: Error) => {
+      clearInterval(drainTimer);
       loggerWithTrace.error('WebSocket error', err, { connectionId: info.id });
       connectionPool.remove(info.id);
     });

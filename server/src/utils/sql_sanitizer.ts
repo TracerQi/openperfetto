@@ -27,13 +27,22 @@ export interface SanitizeResult {
   error?: string;
 }
 
+/**
+ * SPEC-05: 参数匹配模式配置
+ * 用于控制 string 参数在 SQL WHERE 中的匹配方式
+ */
+export interface ParamMatchConfig {
+  matchMode?: 'exact' | 'contains' | 'prefix' | 'glob';
+  columnRef?: string;
+}
+
 // ============= SQL 安全防护类 =============
 
 export class SqlSanitizer {
   // 允许的 SQL 关键字白名单（仅查询操作）
   private static readonly ALLOWED_KEYWORDS = new Set([
     'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'BETWEEN',
-    'LIKE', 'IS', 'NULL', 'AS', 'JOIN', 'LEFT', 'RIGHT', 'INNER',
+    'LIKE', 'GLOB', 'IS', 'NULL', 'AS', 'JOIN', 'LEFT', 'RIGHT', 'INNER',
     'OUTER', 'ON', 'GROUP', 'BY', 'ORDER', 'ASC', 'DESC', 'LIMIT',
     'OFFSET', 'HAVING', 'DISTINCT', 'COUNT', 'SUM', 'AVG', 'MIN',
     'MAX', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'ROUND',
@@ -81,9 +90,14 @@ export class SqlSanitizer {
    * 主入口：将模板和参数组合成安全的 SQL
    * @param template SQL 模板，使用 ${param} 占位符
    * @param params 参数对象
+   * @param paramConfigs SPEC-05: 可选的参数匹配模式配置（matchMode + columnRef）
    * @returns 安全的 SQL 字符串
    */
-  sanitize(template: string, params: Record<string, unknown>): string {
+  sanitize(
+    template: string,
+    params: Record<string, unknown>,
+    paramConfigs?: Record<string, ParamMatchConfig>
+  ): string {
     // 1. 检查查询长度
     if (template.length > SqlSanitizer.MAX_QUERY_LENGTH) {
       throw new Error(`Query exceeds maximum length of ${SqlSanitizer.MAX_QUERY_LENGTH} characters`);
@@ -104,9 +118,16 @@ export class SqlSanitizer {
         continue;
       }
 
-      // 根据值类型进行安全转换
-      const safeValue = this.sanitizeValue(value);
-      sql = sql.split(placeholder).join(safeValue);
+      // SPEC-05: 检查是否有 matchMode + columnRef 配置
+      const config = paramConfigs?.[key];
+      if (config?.matchMode && config?.columnRef && typeof value === 'string') {
+        const replacement = this.buildMatchExpression(config.matchMode, config.columnRef, value);
+        sql = sql.split(placeholder).join(replacement);
+      } else {
+        // 根据值类型进行安全转换（原有逻辑）
+        const safeValue = this.sanitizeValue(value);
+        sql = sql.split(placeholder).join(safeValue);
+      }
     }
 
     // 4. 处理条件表达式 ${condition ? "sql" : ""}
@@ -273,6 +294,43 @@ export class SqlSanitizer {
   }
 
   // ============= 私有方法 =============
+
+  /**
+   * SPEC-05: 根据 matchMode 构建 SQL 条件表达式
+   */
+  private buildMatchExpression(
+    matchMode: 'exact' | 'contains' | 'prefix' | 'glob',
+    columnRef: string,
+    value: string
+  ): string {
+    // 验证 columnRef 是合法标识符
+    if (!this.isIdentifierSafe(columnRef)) {
+      logger.warn('Unsafe columnRef, falling back to escaped value', { columnRef });
+      return `'${this.escapeStringValue(value)}'`;
+    }
+
+    const escaped = this.escapeStringValue(value);
+
+    switch (matchMode) {
+      case 'exact':
+        return `${columnRef} = '${escaped}'`;
+      case 'contains':
+        return `${columnRef} LIKE '%${escaped}%'`;
+      case 'prefix':
+        return `${columnRef} LIKE '${escaped}%'`;
+      case 'glob':
+        return `${columnRef} GLOB '${escaped}'`;
+      default:
+        return `'${escaped}'`;
+    }
+  }
+
+  /**
+   * SPEC-05: SQL 字符串值转义（单引号 -> 双单引号）
+   */
+  private escapeStringValue(value: string): string {
+    return value.replace(/'/g, "''");
+  }
 
   /**
    * 根据值类型进行安全转换

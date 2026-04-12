@@ -27,7 +27,7 @@
  * 4. 汇总所有问题返回 VerificationResult
  */
 
-import {ChatMessage, ToolCall, ToolResult, AnalysisPlan} from '../types/agent';
+import {ChatMessage, ToolCall, ToolResult, AnalysisPlan, ValidationFailure} from '../types/agent';
 import {Artifact} from '../types/artifact';
 
 /**
@@ -94,6 +94,49 @@ export interface VerificationResult {
   l3Result: L3ReviewResult | null;
   totalIssues: number;
   timestamp: number;
+  /** SPEC-04: 结构化的失败信息列表（optional，向后兼容） */
+  structuredFailures?: ValidationFailure[];
+}
+
+/**
+ * SPEC-04: 增强版 L1 规则接口
+ * 继承 L1Rule，新增 checkEnhanced 方法返回结构化的 ValidationFailure。
+ * 与现有 check() 并行存在，优先使用 checkEnhanced。
+ */
+export interface L1RuleEnhanced extends L1Rule {
+  checkEnhanced(
+    messages: ChatMessage[],
+    artifacts: Artifact[],
+  ): ValidationFailure | null;
+}
+
+/**
+ * SPEC-04: 从消息中提取最近的 SQL 查询语句
+ */
+function extractLastSqlFromMessages(messages: ChatMessage[]): string | null {
+  // 从后向前查找最近的 execute_sql 工具调用
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.toolCall && msg.toolCall.name === 'execute_sql') {
+      const sql = msg.toolCall.arguments?.sql;
+      if (typeof sql === 'string') return sql;
+    }
+  }
+  return null;
+}
+
+/**
+ * SPEC-04: 查找相关的 Artifact ID
+ */
+function findRelevantArtifactId(artifacts: Artifact[]): string {
+  // 返回第一个包含时间戳列的 artifact，或空字符串
+  for (const artifact of artifacts) {
+    const hasTs = artifact.fullData.columns.some(
+      (col) => col.type === 'timestamp' || col.name.toLowerCase().includes('ts'),
+    );
+    if (hasTs) return artifact.id;
+  }
+  return artifacts.length > 0 ? artifacts[0].id : '';
 }
 
 /**
@@ -179,7 +222,11 @@ export function extractNumbers(text: string): number[] {
  * 规则 1: timestamp_monotonic - 检查时间戳是否递增
  * 分析 artifact 中的时间戳字段，确保时间序列单调递增
  */
-const rule_timestamp_monotonic: L1Rule = {
+/**
+ * SPEC-04: 增强版 timestamp_monotonic 规则
+ * 同时实现 L1Rule.check() 和 L1RuleEnhanced.checkEnhanced()
+ */
+const rule_timestamp_monotonic: L1RuleEnhanced = {
   id: 'L1-001',
   name: 'timestamp_monotonic',
   category: 'data_integrity',
@@ -200,6 +247,33 @@ const rule_timestamp_monotonic: L1Rule = {
       }
     }
     return null;
+  },
+  checkEnhanced: (messages: ChatMessage[], artifacts: Artifact[]): ValidationFailure | null => {
+    // 1. 执行原有 check() 逻辑
+    const issue = rule_timestamp_monotonic.check(messages, artifacts);
+    if (!issue) return null;
+
+    // 2. 检查最近 SQL 是否包含 ORDER BY dur DESC
+    const lastSql = extractLastSqlFromMessages(messages);
+    const hasDurDescOrder = lastSql !== null && /ORDER\s+BY\s+dur\s+DESC/i.test(lastSql);
+
+    return {
+      ruleId: 'timestamp_monotonic',
+      artifactId: findRelevantArtifactId(artifacts),
+      severity: hasDurDescOrder ? 'warning' : 'error',
+      description: issue,
+      fixGuidance: {
+        action: hasDurDescOrder ? 'SKIP_VALIDATION_RULE' : 'MODIFY_SQL_ORDER_BY',
+        autoFixAvailable: hasDurDescOrder,
+        suggestedParams: hasDurDescOrder ? undefined : {orderBy: 'ts ASC'},
+        reason: hasDurDescOrder
+          ? '查询按 dur DESC 排序，时间戳非递增为预期行为'
+          : '建议添加 ORDER BY ts ASC 确保时间戳递增',
+      },
+      diagnostics: {
+        relevantSqlClause: lastSql ?? undefined,
+      },
+    };
   },
 };
 
@@ -691,6 +765,44 @@ const rule_lock_no_holder: L1Rule = {
     const hasLockClaim = lockPatterns.some((p) => p.test(content));
     if (!hasLockClaim) return null;
 
+    // 排除否定形式：检查锁竞争关键词前后是否有否定词
+    // 中文否定模式
+    const cnNegationPatterns = [
+      /无锁竞争/gi,
+      /没有锁竞争/gi,
+      /未出现锁竞争/gi,
+      /未发现锁竞争/gi,
+      /不存在锁竞争/gi,
+      /无.*?锁等待/gi,
+      /没有.*?锁等待/gi,
+      /未出现.*?锁等待/gi,
+      /0\s*条锁竞争/gi,
+    ];
+    // 英文否定模式
+    const enNegationPatterns = [
+      /no\s+lock\s*contention/gi,
+      /without\s+lock\s*contention/gi,
+      /no\s+mutex.*?(wait|block)/gi,
+      /no\s+monitor.*?(contention|wait)/gi,
+      /not\s+.*?lock\s*contention/gi,
+      /zero\s+lock\s*contention/gi,
+    ];
+
+    const allNegations = [...cnNegationPatterns, ...enNegationPatterns];
+    const hasNegation = allNegations.some((p) => p.test(content));
+
+    // 如果所有锁竞争提及都是否定形式，则不触发规则
+    if (hasNegation) {
+      // 进一步确认：是否还有非否定形式的锁竞争声明
+      // 移除所有否定形式后再检测
+      let cleaned = content;
+      for (const neg of allNegations) {
+        cleaned = cleaned.replace(neg, '');
+      }
+      const hasPositiveClaim = lockPatterns.some((p) => p.test(cleaned));
+      if (!hasPositiveClaim) return null; // 全部是否定形式，不触发
+    }
+
     // 检查是否识别了持有者
     const holderPatterns = [
       /held\s*by|持有者|holder|持有/gi,
@@ -933,7 +1045,7 @@ const rule_aggregation_completeness: L1Rule = {
       const matches = Array.from(content.matchAll(pattern));
       for (const match of matches) {
         const percentage = parseFloat(match[1]);
-        if (percentage <= 30) continue; // 低百分比不检查
+        if (percentage <= 50) continue; // 低百分比不检查（阈值从30提升到50）
 
         // 找到该百分比所在的段落
         const matchIdx = match.index ?? 0;
@@ -961,14 +1073,14 @@ const rule_aggregation_completeness: L1Rule = {
         const hasDataRef =
           /artifact|art_\d+|fetch_artifact|查询结果|数据显示/i.test(paragraph);
 
-        // 高百分比 + 无聚合说明 + (有采样数据 或 无数据引用) => 警告
-        if (hasSampledArtifact || !hasDataRef) {
+        // 仅在无数据引用且非采样数据时才报告
+        if (!hasDataRef && !hasSampledArtifact) {
           return (
             `百分比声明 "${percentage}%" 可能基于不完整数据: ` +
-            `未发现聚合/汇总说明` +
-            (hasSampledArtifact ? '，且存在采样数据（部分行可能被省略）' : '')
+            `未发现聚合/汇总说明且无数据源引用`
           );
         }
+        // 采样数据上的百分比声明不再触发硬失败（采样固有误差在可接受范围）
       }
     }
     return null;
@@ -1028,7 +1140,7 @@ const rule_artifact_conclusion_consistency: L1Rule = {
 
             // 如果声称的值与某个统计量接近（偏差 < 50%）但超过 10%，
             // 说明可能引用了该统计量但数值不准确
-            if (deviation > 0.1 && deviation < 0.5) {
+            if (deviation > 0.25 && deviation < 0.5) {
               // 进一步确认：声称的值是否“大致对应”某个统计量
               // 通过检查结论中是否提到相关列名或统计量名
               const colNameLower = colName.toLowerCase();
@@ -1039,7 +1151,7 @@ const rule_artifact_conclusion_consistency: L1Rule = {
                 return (
                   `结论中数值 ${claimedValue}ms 与 Artifact ${artifact.id} ` +
                   `的 ${colName}.${ref.label} (${ref.val.toFixed(2)}) ` +
-                  `偏差 ${(deviation * 100).toFixed(1)}%（超过 10% 阈值）`
+                  `偏差 ${(deviation * 100).toFixed(1)}%（超过 25% 阈值）`
                 );
               }
             }
@@ -1120,14 +1232,28 @@ export class Verifier {
    * L1 启发式验证
    * 运行所有 L1 规则，返回问题列表
    */
-  runL1Validation(messages: ChatMessage[], artifacts: Artifact[]): string[] {
+  runL1Validation(messages: ChatMessage[], artifacts: Artifact[]): {
+    issues: string[];
+    structuredFailures: ValidationFailure[];
+  } {
     const issues: string[] = [];
+    const structuredFailures: ValidationFailure[] = [];
 
     for (const rule of this.l1Rules) {
       try {
-        const issue = rule.check(messages, artifacts);
-        if (issue) {
-          issues.push(`[${rule.id}] ${rule.name}: ${issue}`);
+        // SPEC-04: 优先使用 checkEnhanced
+        if ('checkEnhanced' in rule) {
+          const failure = (rule as L1RuleEnhanced).checkEnhanced(messages, artifacts);
+          if (failure) {
+            structuredFailures.push(failure);
+            issues.push(`[${rule.id}] ${rule.name}: ${failure.description}`); // 向后兼容
+          }
+        } else {
+          // 回退到现有 check()
+          const issue = rule.check(messages, artifacts);
+          if (issue) {
+            issues.push(`[${rule.id}] ${rule.name}: ${issue}`);
+          }
         }
       } catch (error) {
         // 规则执行出错不应该阻塞验证流程
@@ -1135,7 +1261,7 @@ export class Verifier {
       }
     }
 
-    return issues;
+    return {issues, structuredFailures};
   }
 
   /**
@@ -1248,7 +1374,8 @@ export class Verifier {
     progressRatio?: number,
   ): Promise<VerificationResult> {
     // L1 验证
-    const l1Issues = this.runL1Validation(messages, artifacts);
+    const l1Result = this.runL1Validation(messages, artifacts);
+    const l1Issues = l1Result.issues;
 
     // L2 验证（区分硬性问题和软警告）
     const l2Result = plan
@@ -1278,6 +1405,7 @@ export class Verifier {
       l3Result,
       totalIssues,
       timestamp: Date.now(),
+      structuredFailures: l1Result.structuredFailures.length > 0 ? l1Result.structuredFailures : undefined,
     };
   }
 

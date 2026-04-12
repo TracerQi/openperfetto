@@ -25,6 +25,9 @@ export const SkillParamSchema = z.object({
   maxLength: z.number().optional(),
   pattern: z.string().optional(),
   allowedValues: z.array(z.string()).optional(),
+  // --- SPEC-05: matchMode / columnRef ---
+  matchMode: z.enum(['exact', 'contains', 'prefix', 'glob']).optional(),
+  columnRef: z.string().optional(),
 });
 
 export type SkillParam = z.infer<typeof SkillParamSchema>;
@@ -357,6 +360,8 @@ export class YamlParser {
       'input_mapping': 'inputMapping',
       'allowed_values': 'allowedValues',
       'max_length': 'maxLength',
+      'match_mode': 'matchMode',
+      'column_ref': 'columnRef',
     };
 
     const result: Record<string, unknown> = {};

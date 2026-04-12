@@ -18,6 +18,8 @@ parameters:
     type: string
     required: false
     description: "进程名过滤（可选）"
+    match_mode: exact
+    column_ref: p.name
   - name: limit
     type: integer
     required: false

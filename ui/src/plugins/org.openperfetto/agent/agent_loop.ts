@@ -20,7 +20,7 @@ import {
   AnalysisSession,
   SceneType,
 } from '../types/plugin_state';
-import {ChatMessage, ToolCall, ToolResult, AnalysisPlan} from '../types/agent';
+import {ChatMessage, ToolCall, ToolResult, AnalysisPlan, ValidationFailure} from '../types/agent';
 import {ContextManager} from './context_manager';
 import {PlanningGate} from './planning_gate';
 import {SceneClassifier} from './scene_classifier';
@@ -29,6 +29,8 @@ import {WebSocketClient} from '../services/websocket_client';
 import {LLMStreamHandler} from '../services/llm_stream_handler';
 import {ToolRegistry, createAllTools} from '../tools';
 import {Verifier, VerificationResult} from './verifier';
+import {AutoFixer} from './auto_fixer';
+import {ToolCallInterceptor} from './tool_call_interceptor';
 import {opLogger} from '../utils/logger';
 
 /**
@@ -157,6 +159,9 @@ export class AgentLoop {
   private streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly STREAM_DEBOUNCE_MS = 100;
 
+  // 工具调用拦截器（一级保护：artifact 结果复用）
+  private toolCallInterceptor: ToolCallInterceptor;
+
   // 验证器
   private verifier: Verifier;
   private verificationRetries = 0;
@@ -221,6 +226,9 @@ export class AgentLoop {
     // 初始化 Tool Registry 并注册所有 Tools
     this.toolRegistry = new ToolRegistry(trace, this.artifactStore);
     this.toolRegistry.registerAll(createAllTools(trace, this.artifactStore, store));
+
+    // 初始化工具调用拦截器
+    this.toolCallInterceptor = new ToolCallInterceptor(this.artifactStore);
 
     // 初始化验证器
     this.verifier = new Verifier();
@@ -462,8 +470,10 @@ export class AgentLoop {
     // 让出 UI 线程
     await scheduler.yield();
 
-    // 构建上下文
-    await this.contextManager.buildContext(event.scene);
+    // 构建上下文（注入 Artifact 状态报告和工具调用历史摘要 — SPEC-07）
+    const statusReport = this.artifactStore.getStatusReport() || undefined;
+    const historySummary = this.getToolCallHistorySummary();
+    await this.contextManager.buildContext(event.scene, statusReport, historySummary);
 
     await scheduler.yield();
     await this.transition({type: 'CONTEXT_BUILT'});
@@ -547,6 +557,7 @@ export class AgentLoop {
         if (event.toolCall.name === 'submit_plan') {
           // 刷新流式缓冲区，确保 AI 文本在工具调用消息之前渲染
           this.flushStreamBuffer();
+          this.streamHandler.forceFlush('before_submit_plan');
 
           // 添加 tool_call 消息（UI 显示 + LLM 协议必需）
           this.addMessage({
@@ -722,6 +733,7 @@ export class AgentLoop {
           // 刷新流式缓冲区，确保 AI 文本在工具调用消息之前渲染到 UI
           // 防止双重防抖（LLMStreamHandler 100ms + AgentLoop 100ms）导致工具消息插入文本中间
           this.flushStreamBuffer();
+          this.streamHandler.forceFlush('before_tool_use');
 
           this.state = AgentLoopState.EXECUTING_TOOL;
           this.pendingToolCalls.set(event.toolCall.id, event.toolCall);
@@ -825,6 +837,9 @@ export class AgentLoop {
       });
     }
 
+    // 工具结果处理后强制刷新流式文本缓冲区
+    this.streamHandler.forceFlush('after_tool_result');
+
     m.redraw();
 
     // 如果没有待处理的工具调用，返回 AWAITING_LLM
@@ -871,18 +886,16 @@ export class AgentLoop {
         } else {
           // 防御性 flush：确保流式文本在系统消息之前完成渲染
           this.flushStreamBuffer();
-          // 添加验证问题消息，返回 AWAITING_LLM 重新请求
+          // 根据失败类型生成针对性提示
+          const retryPrompt = this.buildRetryPrompt(event.issues);
+
           this.addMessage({
             id: `verify_fail_${Date.now()}`,
             role: 'system',
             content:
               `验证发现问题（第 ${this.verificationRetries}/${AgentLoop.MAX_VERIFICATION_RETRIES} 次重试）:\n` +
               event.issues.map((i) => `  - ${i}`).join('\n') +
-              '\n\n请执行以下操作来修正:' +
-              '\n1. 不要重复调用已执行过的工具' +
-              '\n2. 调用计划中尚未执行的工具 (如 execute_sql, invoke_skill)' +
-              '\n3. 基于工具返回的数据进行分析' +
-              '\n4. 确保所有结论都有工具查询结果支持',
+              '\n\n' + retryPrompt,
             timestamp: Date.now(),
           });
           this.state = AgentLoopState.AWAITING_LLM;
@@ -899,7 +912,42 @@ export class AgentLoop {
    * 通过 ToolRegistry 执行实际的 Tool 实现
    */
   private async executeToolCall(toolCall: ToolCall): Promise<void> {
-    // 去重检测：防止 LLM 以相同参数重复调用同一工具
+    // ===== artifact 复用拦截（一级保护） =====
+    const interceptResult = this.toolCallInterceptor.intercept(
+      toolCall.name,
+      (toolCall.arguments || {}) as Record<string, unknown>,
+    );
+
+    if (interceptResult.action === 'REUSE' && interceptResult.artifactId) {
+      opLogger.info('Reusing existing artifact', {
+        toolName: toolCall.name,
+        artifactId: interceptResult.artifactId,
+        reason: interceptResult.reason,
+      });
+
+      // 生成复用结果消息
+      const artifact = this.artifactStore.get(interceptResult.artifactId);
+      const summaryText = artifact
+        ? this.artifactStore.formatForLLM(interceptResult.artifactId)
+        : `Artifact ${interceptResult.artifactId} available`;
+
+      await this.transition({
+        type: 'TOOL_RESULT',
+        result: {
+          toolCallId: toolCall.id,
+          success: true,
+          data: {
+            reused: true,
+            artifactId: interceptResult.artifactId,
+            note: `Reused existing result. ${interceptResult.reason}`,
+            summary: summaryText,
+          },
+        },
+      });
+      return;
+    }
+
+    // ===== 去重检测（二级保护）：防止 LLM 以相同参数重复调用同一工具 =====
     const argsKey = JSON.stringify(toolCall.arguments || {});
     const recentCalls = this.recentToolCalls.filter(
       (c) =>
@@ -981,6 +1029,40 @@ export class AgentLoop {
         },
       });
     }
+  }
+
+  /**
+   * 生成工具调用历史摘要（SPEC-07）
+   * 遍历 recentToolCalls，生成"已调用的分析工具"摘要文本
+   */
+  private getToolCallHistorySummary(): string | undefined {
+    const recentCalls = this.recentToolCalls.slice(-10); // 最近 10 次调用
+    if (recentCalls.length === 0) return undefined;
+
+    // 按工具名分组统计
+    const toolCounts = new Map<string, number>();
+    for (const call of recentCalls) {
+      toolCounts.set(call.name, (toolCounts.get(call.name) || 0) + 1);
+    }
+
+    const lines: string[] = [];
+    lines.push(`共 ${recentCalls.length} 次工具调用:`);
+    for (const [name, count] of toolCounts) {
+      lines.push(`- ${name}: ${count}次`);
+    }
+
+    // 最近调用详情
+    const lastCalls = recentCalls.slice(-5);
+    lines.push('');
+    lines.push('最近调用:');
+    for (const call of lastCalls) {
+      const briefArgs = call.argsKey.length > 60
+        ? call.argsKey.substring(0, 60) + '...'
+        : call.argsKey;
+      lines.push(`  ${call.name}(${briefArgs})`);
+    }
+
+    return lines.join('\n');
   }
 
   /**
@@ -1138,11 +1220,54 @@ export class AgentLoop {
         progressRatio,
       );
 
+      // SPEC-04: AutoFixer 自动修正结构化失败项
+      if (!result.passed && result.structuredFailures?.length) {
+        const autoFixer = new AutoFixer();
+        const remainingFailures: ValidationFailure[] = [];
+
+        for (const failure of result.structuredFailures) {
+          if (failure.fixGuidance.autoFixAvailable) {
+            const fixResult = autoFixer.attemptAutoFix(failure);
+            if (fixResult.success) {
+              // 自动修正成功，跳过该失败项
+              opLogger.info(`[AgentLoop] AutoFixed: ${fixResult.actionTaken}`);
+              // 从 l1Issues 中移除对应的描述
+              const issueIdx = result.l1Issues.findIndex((i) => i.includes(failure.description));
+              if (issueIdx >= 0) {
+                result.l1Issues.splice(issueIdx, 1);
+              }
+              continue;
+            }
+          }
+          remainingFailures.push(failure);
+        }
+
+        // 更新 structuredFailures 为剩余项
+        result.structuredFailures = remainingFailures.length > 0 ? remainingFailures : undefined;
+
+        // 重算 totalIssues 和 passed
+        const l3IssueCount = result.l3Result && !result.l3Result.approved ? result.l3Result.issues.length : 0;
+        result.totalIssues = result.l1Issues.length + result.l2Issues.length + l3IssueCount;
+        result.passed = result.totalIssues === 0;
+
+        // 如果还有未修正的结构化失败，注入修正指引到 LLM 上下文
+        if (remainingFailures.length > 0 && !result.passed) {
+          const fixGuidanceText = remainingFailures.map((f) =>
+            `[${f.ruleId}] ${f.description}\n` +
+            `  修正建议: ${f.fixGuidance.action} - ${f.fixGuidance.reason ?? ''}\n` +
+            `  诊断: ${JSON.stringify(f.diagnostics)}`,
+          ).join('\n\n');
+
+          this.injectFixGuidanceToContext(fixGuidanceText);
+        }
+      }
+
       opLogger.notice('[AgentLoop] Verification result', {
         passed: result.passed,
         l1Issues: result.l1Issues.length,
         l2Issues: result.l2Issues.length,
         softWarnings: result.softWarnings.length,
+        structuredFailures: result.structuredFailures?.length ?? 0,
         progressRatio,
       });
 
@@ -1172,6 +1297,67 @@ export class AgentLoop {
         },
       });
     }
+  }
+
+  /**
+   * SPEC-04: 将结构化修正指引注入 LLM 上下文
+   */
+  private injectFixGuidanceToContext(guidanceText: string): void {
+    this.addMessage({
+      id: `fix_guidance_${Date.now()}`,
+      role: 'system',
+      content: `[验证修正指引]\n${guidanceText}`,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * 根据验证失败类型构建针对性重试提示
+   */
+  private buildRetryPrompt(issues: string[]): string {
+    const prompts: string[] = [];
+
+    for (const issue of issues) {
+      if (issue.includes('L1-001') && issue.includes('时间戳不单调递增')) {
+        prompts.push(
+          '数据排序问题：你之前查询的数据按非时间戳列排序，导致时间戳不单调。' +
+          '如果需要重新查询，请确保使用 ORDER BY ts ASC。' +
+          '如果当前数据已足够，可以直接基于现有数据总结结论。'
+        );
+      } else if (issue.includes('L1-015') && issue.includes('锁竞争')) {
+        prompts.push(
+          '锁竞争声明问题：请确保锁竞争的声明基于工具查询结果。' +
+          '如果你是在说"无锁竞争"，请在表述中明确使用"经查询验证，未发现锁竞争"。' +
+          '如果声称存在锁竞争，请提供锁持有者信息。'
+        );
+      } else if (issue.includes('L1-022') || issue.includes('不完整数据')) {
+        prompts.push(
+          '数据完整性问题：你的百分比计算可能基于采样或部分数据。' +
+          '请在结论中注明数据范围，例如"基于已分类的启动阶段数据"。' +
+          '不需要重新调用工具，只需修正表述即可。'
+        );
+      } else if (issue.includes('L1-023') || issue.includes('偏差')) {
+        prompts.push(
+          '数值一致性问题：结论中的数值与 Artifact 数据存在偏差。' +
+          '请核对 Artifact 中的原始数据并修正结论中的数值。' +
+          '不需要重新调用工具，只需修正数值即可。'
+        );
+      } else if (issue.includes('L2') && issue.includes('工具未执行')) {
+        prompts.push(
+          '计划遵从问题：有计划阶段的工具尚未执行。' +
+          '请调用计划中尚未执行的工具继续分析。'
+        );
+      } else {
+        prompts.push(
+          '请基于工具返回的数据修正分析结论，确保所有声明有证据支持。'
+        );
+      }
+    }
+
+    // 去重
+    const uniquePrompts = [...new Set(prompts)];
+    return '请执行以下操作来修正:\n' +
+      uniquePrompts.map((p, i) => `${i + 1}. ${p}`).join('\n');
   }
 
   /**

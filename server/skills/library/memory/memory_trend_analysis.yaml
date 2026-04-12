@@ -19,6 +19,8 @@ parameters:
     type: string
     required: true
     description: "目标进程名"
+    match_mode: contains
+    column_ref: p.name
   - name: sample_interval_ms
     type: integer
     required: false

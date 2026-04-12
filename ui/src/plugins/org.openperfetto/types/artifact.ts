@@ -13,6 +13,23 @@
 // limitations under the License.
 
 /**
+ * Artifact 生命周期状态
+ */
+export type ArtifactStatus = 'PENDING' | 'VALID' | 'FAILED' | 'INVALIDATED';
+
+/**
+ * Artifact 验证结果
+ */
+export interface ValidationResult {
+  /** 验证是否通过 */
+  passed: boolean;
+  /** 失败原因列表 */
+  failures: string[];
+  /** 验证时间戳 */
+  checkedAt: number;
+}
+
+/**
  * Artifact Store 中的数据项
  */
 export interface Artifact {
@@ -31,6 +48,29 @@ export interface Artifact {
 
   /** 原始 SQL 查询（如适用） */
   sourceQuery?: string;
+
+  // ========== 生命周期管理字段（全部 optional） ==========
+
+  /** 生命周期状态，默认 'VALID' */
+  status?: ArtifactStatus;
+
+  /** 版本号，默认 1 */
+  version?: number;
+
+  /** 来源 Skill ID（如 'app_startup_breakdown'） */
+  sourceSkillId?: string;
+
+  /** 来源 Skill 参数 */
+  sourceParams?: Record<string, unknown>;
+
+  /** 前一版本的 artifact ID */
+  previousVersion?: string;
+
+  /** 被替换为的新版本 artifact ID */
+  replacedBy?: string;
+
+  /** 验证结果 */
+  validationResult?: ValidationResult;
 }
 
 export type ArtifactType = 'table' | 'scalar' | 'chart' | 'trace_flow';

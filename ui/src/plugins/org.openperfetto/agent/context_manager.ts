@@ -26,6 +26,8 @@ interface TokenBudgetConfig {
   systemPrompt: number;
   sceneStrategy: number;
   traceMetadata: number;
+  artifactStatus: number;
+  toolCallHistory: number;
   history: number;
 }
 
@@ -38,6 +40,8 @@ interface SceneBudgetConfig {
     systemPrompt: number;
     sceneStrategy: number;
     traceMetadata: number;
+    artifactStatus?: number;
+    toolCallHistory?: number;
     history: number;
   };
 }
@@ -88,7 +92,9 @@ export class ContextManager {
           systemPrompt: 0.1,
           sceneStrategy: 0.08,
           traceMetadata: 0.12,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       startup_cold: {
@@ -97,7 +103,9 @@ export class ContextManager {
           systemPrompt: 0.1,
           sceneStrategy: 0.08,
           traceMetadata: 0.12,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       binder_blocking: {
@@ -106,7 +114,9 @@ export class ContextManager {
           systemPrompt: 0.1,
           sceneStrategy: 0.08,
           traceMetadata: 0.12,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       lock_contention: {
@@ -115,7 +125,9 @@ export class ContextManager {
           systemPrompt: 0.1,
           sceneStrategy: 0.08,
           traceMetadata: 0.12,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       // 标准场景
@@ -125,7 +137,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       startup_warm: {
@@ -134,7 +148,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       startup_hot: {
@@ -143,7 +159,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       io_analysis: {
@@ -152,7 +170,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       high_load: {
@@ -161,7 +181,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       screen_on_off: {
@@ -170,7 +192,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       unlock: {
@@ -179,7 +203,9 @@ export class ContextManager {
           systemPrompt: 0.12,
           sceneStrategy: 0.08,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
       general: {
@@ -188,7 +214,9 @@ export class ContextManager {
           systemPrompt: 0.15,
           sceneStrategy: 0.05,
           traceMetadata: 0.1,
-          history: 0.7,
+          artifactStatus: 0.03,
+          toolCallHistory: 0.03,
+          history: 0.64,
         },
       },
     };
@@ -211,6 +239,8 @@ export class ContextManager {
       systemPrompt: Math.floor(total * alloc.systemPrompt),
       sceneStrategy: Math.floor(total * alloc.sceneStrategy),
       traceMetadata: Math.floor(total * alloc.traceMetadata),
+      artifactStatus: Math.floor(total * (alloc.artifactStatus ?? 0)),
+      toolCallHistory: Math.floor(total * (alloc.toolCallHistory ?? 0)),
       history: Math.floor(total * alloc.history),
     };
   }
@@ -231,8 +261,15 @@ export class ContextManager {
 
   /**
    * 根据场景构建完整上下文
+   * @param sceneType 场景类型
+   * @param artifactStatusReport 可选：来自 artifactStore.getStatusReport() 的 Artifact 状态报告
+   * @param toolCallHistorySummary 可选：工具调用历史摘要
    */
-  async buildContext(sceneType: SceneType): Promise<void> {
+  async buildContext(
+    sceneType: SceneType,
+    artifactStatusReport?: string,
+    toolCallHistorySummary?: string,
+  ): Promise<void> {
     this._currentSceneType = sceneType;
     this._currentBudget = this.calculateBudget(sceneType);
 
@@ -254,6 +291,24 @@ export class ContextManager {
     const skillMarkers = this.getSkillMarkersForScene(sceneType);
     if (skillMarkers) {
       parts.push(skillMarkers);
+    }
+
+    // 6. Artifact 状态报告（新增：SPEC-07）
+    if (artifactStatusReport) {
+      const truncated = this.truncateToTokenBudget(
+        artifactStatusReport,
+        this.getArtifactStatusBudget(sceneType),
+      );
+      parts.push(this.formatArtifactStatusSection(truncated));
+    }
+
+    // 7. 工具调用历史摘要（新增：SPEC-07）
+    if (toolCallHistorySummary) {
+      const truncated = this.truncateToTokenBudget(
+        toolCallHistorySummary,
+        this.getToolCallHistoryBudget(sceneType),
+      );
+      parts.push(this.formatToolCallHistorySection(truncated));
     }
 
     this.systemPrompt = parts.join('\n\n---\n\n');
@@ -345,6 +400,14 @@ export class ContextManager {
 - 当数据不足时表达不确定性
 - 使用查询结果中的时间戳，而非估算
 - 关注可操作的洞察，而非泛泛的观察
+
+## 数据准确性要求
+
+- **数据覆盖意识**：技能（invoke_skill）返回的数据可能只覆盖启动过程的部分阶段。如果返回数据中各阶段耗时之和远小于预期的总启动时间，说明有大量未分类的操作被省略。
+- **采样数据标注**：当 Artifact 摘要中标注"采样数据"时，统计结论（百分比、排名、分位数）可能存在 ±20% 的误差。请在结论中注明"基于采样数据"。
+- **百分比计算基准**：计算百分比时，必须明确基准是什么。例如"占已分类阶段的 45%"与"占总启动时间的 12%"含义完全不同。如果数据中包含 'other' 未分类阶段，应在百分比计算中说明是否包含。
+- **交叉验证**：当多个工具返回的数据存在矛盾时（如 app_startup_breakdown 的总时间与 startup_blocking_calls 的总时间不一致），应主动说明差异原因。
+- **不确定性表达**：当数据不足以支撑确定性结论时，使用"约"、"大约"、"估计"等词汇，并说明数据局限。
 
 ## Planning Gate
 
@@ -745,6 +808,71 @@ ${markers}`;
       );
       return null;
     }
+  }
+
+  /**
+   * 格式化 Artifact 状态报告区块
+   */
+  private formatArtifactStatusSection(content: string): string {
+    return [
+      '## 已获取的分析数据',
+      '',
+      '以下是当前分析会话中已获取的数据摘要，请基于这些已有数据继续分析，避免重复查询：',
+      '',
+      content,
+    ].join('\n');
+  }
+
+  /**
+   * 格式化工具调用历史区块
+   */
+  private formatToolCallHistorySection(content: string): string {
+    return [
+      '## 已调用的分析工具',
+      '',
+      '以下是本次分析中已执行的工具调用摘要，请参考执行结果规划后续步骤：',
+      '',
+      content,
+    ].join('\n');
+  }
+
+  /**
+   * 获取 Artifact 状态的 Token 预算
+   */
+  private getArtifactStatusBudget(sceneType: SceneType): number {
+    const config = ContextManager.SCENE_BUDGETS[sceneType];
+    return Math.floor(config.total * (config.allocation.artifactStatus ?? 0));
+  }
+
+  /**
+   * 获取工具调用历史的 Token 预算
+   */
+  private getToolCallHistoryBudget(sceneType: SceneType): number {
+    const config = ContextManager.SCENE_BUDGETS[sceneType];
+    return Math.floor(config.total * (config.allocation.toolCallHistory ?? 0));
+  }
+
+  /**
+   * 将文本截断到指定 Token 预算内。
+   * 优先保留最新内容（从末尾截断）。
+   */
+  private truncateToTokenBudget(text: string, maxTokens: number): string {
+    const estimated = this.estimateTokens(text);
+    if (estimated <= maxTokens) return text;
+
+    // 按行截断，保留尾部（最新内容）
+    const lines = text.split('\n');
+    let result = '';
+    let tokens = 0;
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const lineTokens = this.estimateTokens(lines[i]);
+      if (tokens + lineTokens > maxTokens) break;
+      result = lines[i] + (result ? '\n' + result : '');
+      tokens += lineTokens;
+    }
+
+    return result || text.slice(-maxTokens * 2); // fallback
   }
 
   private async hasFrameTimeline(): Promise<boolean> {

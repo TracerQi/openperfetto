@@ -4,7 +4,7 @@
  */
 
 import { StructuredLogger } from '../utils/logger.js';
-import { SqlSanitizer } from '../utils/sql_sanitizer.js';
+import { SqlSanitizer, ParamMatchConfig } from '../utils/sql_sanitizer.js';
 import { SkillRegistry } from './skill_registry.js';
 import {
   SkillDefinition,
@@ -63,6 +63,15 @@ export interface ParameterValidationResult {
   sanitizedParams: Record<string, unknown>;
 }
 
+// ============= SPEC-05: 模板预编译验证类型 =============
+
+export interface TemplateWarning {
+  code: string;       // 如 'LIKE_OVERUSE', 'MISSING_LIMIT', 'PARAM_MISMATCH', 'MISSING_ORDER_BY'
+  message: string;
+  severity: 'warn';
+  skillName: string;
+}
+
 // ============= Skill 处理器类 =============
 
 export class SkillProcessor {
@@ -72,6 +81,121 @@ export class SkillProcessor {
   constructor(registry: SkillRegistry, sanitizer?: SqlSanitizer) {
     this.registry = registry;
     this.sanitizer = sanitizer || new SqlSanitizer();
+  }
+
+  // ============= SPEC-05: SQL 模板预编译验证 =============
+
+  /**
+   * SPEC-05: 验证单个 Skill 的 SQL 模板质量
+   * 返回警告列表，不阻断加载
+   */
+  validateSqlTemplate(
+    skillName: string,
+    sqlTemplate: string,
+    parameters: SkillParam[]
+  ): TemplateWarning[] {
+    const warnings: TemplateWarning[] = [];
+
+    // 1. 检查 LIKE '%${param}%' 模式
+    const likePattern = /LIKE\s+'%\$\{(\w+)\}%'/gi;
+    for (const match of sqlTemplate.matchAll(likePattern)) {
+      warnings.push({
+        code: 'LIKE_OVERUSE',
+        message: `Parameter '${match[1]}' uses LIKE '%...%' which may be overly broad. Consider using matchMode.`,
+        severity: 'warn',
+        skillName,
+      });
+    }
+
+    // 2. 检查缺少 LIMIT
+    if (!/\bLIMIT\b/i.test(sqlTemplate)) {
+      warnings.push({
+        code: 'MISSING_LIMIT',
+        message: 'SQL template has no LIMIT clause, may return excessive rows.',
+        severity: 'warn',
+        skillName,
+      });
+    }
+
+    // 3. 占位符一致性
+    const placeholders = new Set([...sqlTemplate.matchAll(/\$\{(\w+)\}/g)].map(m => m[1]));
+    const paramNames = new Set(parameters.map(p => p.name));
+    for (const ph of placeholders) {
+      if (!paramNames.has(ph)) {
+        warnings.push({
+          code: 'PARAM_MISMATCH',
+          message: `Placeholder '${ph}' has no matching parameter definition.`,
+          severity: 'warn',
+          skillName,
+        });
+      }
+    }
+
+    // 4. 时间序列缺少 ORDER BY
+    const hasTimeColumn = /\b(ts|timestamp|time)\b/i.test(sqlTemplate);
+    const hasOrderBy = /\bORDER\s+BY\b/i.test(sqlTemplate);
+    if (hasTimeColumn && !hasOrderBy) {
+      warnings.push({
+        code: 'MISSING_ORDER_BY',
+        message: 'Query references time columns but has no ORDER BY clause.',
+        severity: 'warn',
+        skillName,
+      });
+    }
+
+    return warnings;
+  }
+
+  /**
+   * SPEC-05: 验证所有已注册 Skill 的 SQL 模板质量
+   * 在 Skill 加载后调用，将警告通过 console.warn 输出
+   */
+  validateAllSkills(): TemplateWarning[] {
+    const allWarnings: TemplateWarning[] = [];
+    const skills = this.registry.getAll();
+
+    for (const skill of skills) {
+      if (skill.sqlTemplate) {
+        const warnings = this.validateSqlTemplate(
+          skill.name,
+          skill.sqlTemplate,
+          skill.parameters
+        );
+        if (warnings.length > 0) {
+          for (const w of warnings) {
+            logger.warn(`[SQL-TEMPLATE] ${w.code}: ${w.message}`, { skillName: w.skillName });
+          }
+          allWarnings.push(...warnings);
+        }
+      }
+    }
+
+    if (allWarnings.length > 0) {
+      logger.warn(`SQL template validation complete: ${allWarnings.length} warning(s) found`);
+    }
+
+    return allWarnings;
+  }
+
+  /**
+   * SPEC-05: 根据 Skill 参数定义构建 paramConfigs
+   * 将含有 matchMode + columnRef 的参数转换为 ParamMatchConfig
+   */
+  private buildParamConfigs(parameters: SkillParam[]): Record<string, ParamMatchConfig> | undefined {
+    const configs: Record<string, ParamMatchConfig> = {};
+    let hasConfig = false;
+
+    for (const param of parameters) {
+      if (param.matchMode && param.columnRef) {
+        configs[param.name] = {
+          matchMode: param.matchMode,
+          columnRef: param.columnRef,
+        };
+        hasConfig = true;
+      }
+    }
+
+    return hasConfig ? configs : undefined;
   }
 
   /**
@@ -479,8 +603,9 @@ export class SkillProcessor {
     }
     
     try {
-      // 生成安全的 SQL
-      const query = this.sanitizer.sanitize(skill.sqlTemplate, params);
+      // 生成安全的 SQL（SPEC-05: 传入 paramConfigs）
+      const paramConfigs = this.buildParamConfigs(skill.parameters);
+      const query = this.sanitizer.sanitize(skill.sqlTemplate, params, paramConfigs);
       
       // 验证生成的 SQL
       const validation = this.sanitizer.validateQuery(query);

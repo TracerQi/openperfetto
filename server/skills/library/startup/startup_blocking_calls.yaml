@@ -57,6 +57,7 @@ sql_template: |
   JOIN process p ON t.upid = p.upid
   WHERE p.name LIKE '%${package_name}%'
     AND t.is_main_thread = 1
+    AND s.dur > 1000000
     AND s.dur >= ${min_dur_ms} * 1e6
   ORDER BY s.dur DESC
   LIMIT ${limit}

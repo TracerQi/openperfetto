@@ -15,6 +15,7 @@
 import {
   Artifact,
   ArtifactData,
+  ArtifactStatus,
   ArtifactSummary,
   ArtifactType,
   NumericStats,
@@ -64,6 +65,8 @@ export class ArtifactStore {
       summary: this.compress(data),
       sourceTool,
       sourceQuery,
+      status: 'VALID',
+      version: 1,
     };
 
     this.artifacts.set(id, artifact);
@@ -107,6 +110,205 @@ export class ArtifactStore {
   clear(): void {
     this.artifacts.clear();
     this.idCounter = 0;
+  }
+
+  // ========== 生命周期管理方法 ==========
+
+  /**
+   * 创建 PENDING 状态的占位 artifact
+   */
+  createPending(
+    skillId: string,
+    params: Record<string, unknown>,
+    sourceTool: string,
+  ): Artifact {
+    // 查找同 skillId+params 的旧版本以确定新版本号
+    const existing = this.findBySkillAndParams(skillId, params);
+    const newVersion = existing ? (existing.version ?? 1) + 1 : 1;
+
+    // 先使旧版本失效
+    this.invalidatePreviousVersions(skillId, params);
+
+    // LRU: 如果达到上限，删除最早的条目
+    if (this.artifacts.size >= ArtifactStore.MAX_ARTIFACTS) {
+      const firstKey = this.artifacts.keys().next().value;
+      if (firstKey !== undefined) {
+        this.artifacts.delete(firstKey);
+      }
+    }
+
+    const id = `art_${++this.idCounter}`;
+
+    const artifact: Artifact = {
+      id,
+      type: 'table',
+      createdAt: Date.now(),
+      fullData: {columns: [], rows: [], totalRowCount: 0},
+      summary: {estimatedTokens: 0, rowCount: 0},
+      sourceTool,
+      status: 'PENDING',
+      version: newVersion,
+      sourceSkillId: skillId,
+      sourceParams: params,
+      previousVersion: existing?.id,
+    };
+
+    // 设置旧版本的 replacedBy
+    if (existing) {
+      const old = this.artifacts.get(existing.id);
+      if (old) {
+        old.replacedBy = id;
+      }
+    }
+
+    this.artifacts.set(id, artifact);
+    return artifact;
+  }
+
+  /**
+   * 将 PENDING artifact 标记为 VALID 并填充数据
+   */
+  markValid(id: string, data: ArtifactData): void {
+    const artifact = this.artifacts.get(id);
+    if (!artifact) {
+      throw new Error(`Artifact ${id} not found`);
+    }
+    if (artifact.status !== 'PENDING') {
+      throw new Error(
+        `Artifact ${id} status is '${artifact.status}', expected 'PENDING'`,
+      );
+    }
+    artifact.fullData = data;
+    artifact.summary = this.compress(data);
+    artifact.status = 'VALID';
+  }
+
+  /**
+   * 将 PENDING artifact 标记为 FAILED
+   */
+  markFailed(id: string, error: string): void {
+    const artifact = this.artifacts.get(id);
+    if (!artifact) {
+      throw new Error(`Artifact ${id} not found`);
+    }
+    if (artifact.status !== 'PENDING') {
+      throw new Error(
+        `Artifact ${id} status is '${artifact.status}', expected 'PENDING'`,
+      );
+    }
+    artifact.status = 'FAILED';
+    artifact.validationResult = {
+      passed: false,
+      failures: [error],
+      checkedAt: Date.now(),
+    };
+  }
+
+  /**
+   * 将 artifact 标记为 INVALIDATED
+   */
+  markInvalidated(id: string, reason: string): void {
+    const artifact = this.artifacts.get(id);
+    if (!artifact) {
+      throw new Error(`Artifact ${id} not found`);
+    }
+    artifact.status = 'INVALIDATED';
+    artifact.validationResult = {
+      passed: false,
+      failures: [reason],
+      checkedAt: Date.now(),
+    };
+  }
+
+  /**
+   * 将同 skillId+params 的所有旧 VALID 版本标记为 INVALIDATED
+   */
+  invalidatePreviousVersions(
+    skillId: string,
+    params: Record<string, unknown>,
+  ): void {
+    const paramsKey = JSON.stringify(params);
+    for (const artifact of this.artifacts.values()) {
+      if (
+        artifact.sourceSkillId === skillId &&
+        JSON.stringify(artifact.sourceParams) === paramsKey &&
+        artifact.status === 'VALID'
+      ) {
+        this.markInvalidated(artifact.id, 'Replaced by newer version');
+      }
+    }
+  }
+
+  /**
+   * 获取所有 VALID 状态的 artifact 摘要
+   */
+  getValidArtifactSummaries(): ArtifactSummary[] {
+    return Array.from(this.artifacts.values())
+      .filter((a) => a.status === 'VALID' || a.status === undefined)
+      .map((a) => a.summary);
+  }
+
+  /**
+   * 生成当前所有 artifact 的状态报告
+   */
+  getStatusReport(): string {
+    const statusIcons: Record<ArtifactStatus, string> = {
+      VALID: '✅',
+      PENDING: '⏳',
+      FAILED: '❌',
+      INVALIDATED: '🚫',
+    };
+
+    const lines: string[] = ['=== Artifact 状态报告 ==='];
+
+    for (const a of this.artifacts.values()) {
+      const status: ArtifactStatus = a.status ?? 'VALID';
+      const icon = statusIcons[status];
+      const rowCount = a.summary?.rowCount ?? 0;
+      let line = `${icon} ${a.id} [${status}] ${a.type} (${rowCount}行) via ${a.sourceTool}`;
+
+      // 添加失败/失效原因
+      if (
+        (status === 'FAILED' || status === 'INVALIDATED') &&
+        a.validationResult?.failures?.length
+      ) {
+        line += ` — ${a.validationResult.failures[0]}`;
+      }
+
+      lines.push(line);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * 查找匹配 skillId+params 的 VALID artifact
+   */
+  findBySkillAndParams(
+    skillId: string,
+    params: Record<string, unknown>,
+  ): Artifact | undefined {
+    const paramsKey = JSON.stringify(params);
+    let best: Artifact | undefined;
+
+    for (const artifact of this.artifacts.values()) {
+      if (
+        artifact.sourceSkillId === skillId &&
+        JSON.stringify(artifact.sourceParams) === paramsKey &&
+        (artifact.status === 'VALID' || artifact.status === undefined)
+      ) {
+        if (
+          !best ||
+          (artifact.version ?? 1) > (best.version ?? 1) ||
+          ((artifact.version ?? 1) === (best.version ?? 1) &&
+            artifact.createdAt > best.createdAt)
+        ) {
+          best = artifact;
+        }
+      }
+    }
+
+    return best;
   }
 
   /**
@@ -159,7 +361,7 @@ export class ArtifactStore {
     summary.sampleRows = this.getQuantileSampledRows(data);
 
     // 标记数据是否经过采样
-    summary.isSampled = data.rows.length > 50;
+    summary.isSampled = data.rows.length > 200;
 
     // 自动生成洞察
     summary.insights = this.generateInsights(data, numericStats, stringStats);
@@ -248,8 +450,8 @@ export class ArtifactStore {
    */
   private getQuantileSampledRows(data: ArtifactData): unknown[][] {
     const rows = data.rows;
-    if (rows.length <= 50) {
-      return rows; // 50行以下全部返回，避免启动分析等场景丢失关键数据
+    if (rows.length <= 200) {
+      return rows; // 200行以下全部返回，性能分析场景数据量大时保留更多关键数据
     }
 
     // 找到第一个数值列用于排序
@@ -294,7 +496,7 @@ export class ArtifactStore {
     }
 
     // 3. 分位数采样点（增加 P10/P40/P60 以更均匀覆盖分布）
-    const percentiles = [10, 25, 40, 50, 60, 75, 90, 95];
+    const percentiles = [1, 5, 10, 25, 40, 50, 60, 75, 90, 95, 99, 99.9];
     for (const p of percentiles) {
       const idx = Math.floor((p / 100) * (sortedRows.length - 1));
       if (!addedIndices.has(idx)) {
@@ -407,6 +609,19 @@ export class ArtifactStore {
       lines.push(`注意：以下为采样数据摘要（完整数据共 ${s.rowCount} 行，可通过 fetch_artifact 分页获取完整数据）`);
     } else {
       lines.push(`以下为完整数据（共 ${s.rowCount} 行）`);
+    }
+
+    // 如果来源是启动分析技能，增加覆盖范围说明
+    if (artifact.sourceTool === 'invoke_skill') {
+      const sourceQuery = artifact.sourceQuery || '';
+      if (sourceQuery.includes('app_startup_breakdown')) {
+        lines.push(`⚠️ 注意：此数据只包含主线程上被分类的启动阶段切片，未分类的操作（如自定义初始化、第三方库加载等）在 'other' 阶段或已被过滤。总启动时间可能大于各阶段之和。`);
+      }
+    }
+
+    // 对采样数据，增加精度警示
+    if (s.isSampled) {
+      lines.push(`⚠️ 采样精度：此数据经过采样（原始 ${s.rowCount} 行），统计分位数（P90/P95/P99）可能有 ±20% 误差。百分比结论请注明"基于采样数据"。`);
     }
 
     if (s.numericStats) {

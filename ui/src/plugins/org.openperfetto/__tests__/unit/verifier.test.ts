@@ -80,7 +80,7 @@ describe('Verifier', () => {
         });
 
         const issues = verifier.runL1Validation([], [artifact]);
-        expect(issues.some((i) => i.includes('L1-001'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-001'))).toBe(false);
       });
 
       it('时间戳不单调应报错', () => {
@@ -91,7 +91,7 @@ describe('Verifier', () => {
         });
 
         const issues = verifier.runL1Validation([], [artifact]);
-        expect(issues.some((i) => i.includes('L1-001'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-001'))).toBe(true);
       });
     });
 
@@ -104,14 +104,14 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-002'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-002'))).toBe(false);
       });
 
       it('无工具支持的线程引用应报错', () => {
         const messages = [createMessage('assistant', 'RenderThread 阻塞了')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-002'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-002'))).toBe(true);
       });
     });
 
@@ -120,7 +120,7 @@ describe('Verifier', () => {
         const messages = [createMessage('assistant', '进程正在运行')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-003'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-003'))).toBe(false);
       });
 
       it('矛盾的进程状态应报错', () => {
@@ -129,7 +129,7 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-003'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-003'))).toBe(true);
       });
     });
 
@@ -138,14 +138,14 @@ describe('Verifier', () => {
         const messages = [createMessage('assistant', 'CPU频率为 2.4GHz')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-004'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-004'))).toBe(false);
       });
 
       it('异常的 CPU 频率应报错', () => {
         const messages = [createMessage('assistant', 'CPU频率为 100GHz')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-004'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-004'))).toBe(true);
       });
     });
 
@@ -163,14 +163,14 @@ describe('Verifier', () => {
 
         const issues = verifier.runL1Validation(messages, artifacts);
         // artifact summary 包含 'gc'，规则认为有证据支持，不应触发
-        expect(issues.some((i) => i.includes('L1-005'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-005'))).toBe(false);
       });
 
       it('无证据的 GC 暂停声明应触发', () => {
         const messages = [createMessage('assistant', 'GC 暂停 200ms 导致卡顿')];
         // 没有提供任何 artifact 支持
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-005'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-005'))).toBe(true);
       });
     });
 
@@ -183,14 +183,14 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-006'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-006'))).toBe(false);
       });
 
       it('无工具证据的主线程 IO 声明应报错', () => {
         const messages = [createMessage('assistant', '主线程存在I/O问题')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-006'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-006'))).toBe(true);
       });
     });
 
@@ -199,14 +199,14 @@ describe('Verifier', () => {
         const messages = [createMessage('assistant', 'CPU使用率为 85%')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-011'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-011'))).toBe(false);
       });
 
       it('超出范围的百分比应报错', () => {
         const messages = [createMessage('assistant', 'CPU使用率为 150%')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-011'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-011'))).toBe(true);
       });
 
       it('负数格式不被正则匹配所以不触发检查', () => {
@@ -216,14 +216,14 @@ describe('Verifier', () => {
 
         const issues = verifier.runL1Validation(messages, []);
         // 正则不匹配负数，所以不触发 L1-011
-        expect(issues.some((i) => i.includes('L1-011'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-011'))).toBe(false);
       });
 
       it('超大百分比应报错', () => {
         const messages = [createMessage('assistant', '超标了 200%')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-011'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-011'))).toBe(true);
       });
     });
 
@@ -239,7 +239,7 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-013'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-013'))).toBe(false);
       });
 
       it('工具调用不足的根因声明应报错', () => {
@@ -250,7 +250,7 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-013'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-013'))).toBe(true);
       });
     });
 
@@ -261,14 +261,14 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-014'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-014'))).toBe(false);
       });
 
       it('ANR 分析无原因类型应报错', () => {
         const messages = [createMessage('assistant', '检测到 ANR')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-014'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-014'))).toBe(true);
       });
     });
 
@@ -279,14 +279,14 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-015'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-015'))).toBe(false);
       });
 
       it('锁竞争分析无持有者应报错', () => {
         const messages = [createMessage('assistant', '存在 lock contention')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-015'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-015'))).toBe(true);
       });
     });
 
@@ -295,14 +295,14 @@ describe('Verifier', () => {
         const messages = [createMessage('assistant', '平均帧率为 58 fps')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-016'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-016'))).toBe(false);
       });
 
       it('异常的 FPS 值应报错', () => {
         const messages = [createMessage('assistant', '帧率为 500 fps')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-016'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-016'))).toBe(true);
       });
     });
 
@@ -315,14 +315,14 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-018'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-018'))).toBe(false);
       });
 
       it('无工具调用的结论应报错', () => {
         const messages = [createMessage('assistant', '结论：问题在于...')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-018'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-018'))).toBe(true);
       });
     });
 
@@ -331,7 +331,7 @@ describe('Verifier', () => {
         const messages = [createMessage('assistant', '检测到多帧 jank')];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-020'))).toBe(false);
+        expect(issues.issues.some((i: string) => i.includes('L1-020'))).toBe(false);
       });
 
       it('单帧问题过度标记应报错', () => {
@@ -340,7 +340,7 @@ describe('Verifier', () => {
         ];
 
         const issues = verifier.runL1Validation(messages, []);
-        expect(issues.some((i) => i.includes('L1-020'))).toBe(true);
+        expect(issues.issues.some((i: string) => i.includes('L1-020'))).toBe(true);
       });
     });
   });
@@ -403,7 +403,7 @@ describe('Verifier', () => {
 
         const result = verifier.runL2Validation(plan, messages);
         expect(result.hardIssues.length).toBeGreaterThan(0);
-        expect(result.hardIssues.some((i) => i.includes('invoke_skill'))).toBe(true);
+        expect(result.hardIssues.some((i: string) => i.includes('invoke_skill'))).toBe(true);
       });
     });
 
@@ -442,7 +442,7 @@ describe('Verifier', () => {
 
         const result = verifier.runL2Validation(plan, messages);
         expect(result.softWarnings.length).toBeGreaterThan(0);
-        expect(result.softWarnings.some((i) => i.includes('soft'))).toBe(true);
+        expect(result.softWarnings.some((i: string) => i.includes('soft'))).toBe(true);
       });
 
       it('软警告不应影响 passed 判定', async () => {
@@ -580,13 +580,13 @@ describe('Verifier', () => {
   describe('边界条件', () => {
     it('空消息列表应正常处理', () => {
       const issues = verifier.runL1Validation([], []);
-      expect(Array.isArray(issues)).toBe(true);
+      expect(Array.isArray(issues.issues)).toBe(true);
     });
 
     it('空 artifact 列表应正常处理', () => {
       const messages = [createMessage('user', '问题')];
       const issues = verifier.runL1Validation(messages, []);
-      expect(Array.isArray(issues)).toBe(true);
+      expect(Array.isArray(issues.issues)).toBe(true);
     });
 
     it('规则执行出错不应阻塞验证', async () => {

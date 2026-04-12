@@ -79,6 +79,7 @@ export class LLMStreamHandler {
   private textBuffer: string = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly DEBOUNCE_MS = 100;
+  private static readonly BUFFER_THRESHOLD = 500;
 
   /**
    * 开始流式监听
@@ -282,10 +283,25 @@ export class LLMStreamHandler {
   }
 
   /**
+   * 强制刷新文本缓冲区，忽略防抖计时器。
+   * @param reason 刷新原因（用于日志记录）
+   */
+  public forceFlush(reason: string): void {
+    this.flushTextBuffer();
+    opLogger.debug('[Stream] Force flushed text buffer', {reason});
+  }
+
+  /**
    * 处理文本增量（带防抖）
    */
   private handleTextDelta(text: string): void {
     this.textBuffer += text;
+
+    // 缓冲区超过阈值时立即刷新
+    if (this.textBuffer.length > LLMStreamHandler.BUFFER_THRESHOLD) {
+      this.flushTextBuffer();
+      return;
+    }
 
     // 重置防抖定时器
     if (this.flushTimer) {
