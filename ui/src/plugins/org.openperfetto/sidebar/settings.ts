@@ -56,17 +56,21 @@ export class Settings implements m.ClassComponent<SettingsAttrs> {
   /** 拖拽排序状态 */
   private dragIndex: number = -1;
   private dragOverIndex: number = -1;
+  /** 记录上次应用的 initialTab 值，仅当 initialTab 变化时才重新应用，防止重绘覆盖用户选择 */
+  private lastAppliedInitialTab: string | undefined = undefined;
 
   view({attrs}: m.CVnode<SettingsAttrs>): m.Children {
     const {store, isOpen, onClose, initialTab} = attrs;
 
     if (!isOpen) {
+      this.lastAppliedInitialTab = undefined;
       return null;
     }
 
-    // 初始打开时切换到指定tab
-    if (initialTab && initialTab !== this.activeTab) {
-      this.activeTab = initialTab as SettingsTab;
+    // 仅当 initialTab 发生变化时才应用，防止后续重绘覆盖用户的 tab 选择
+    if (initialTab !== this.lastAppliedInitialTab) {
+      this.activeTab = (initialTab || 'general') as SettingsTab;
+      this.lastAppliedInitialTab = initialTab;
     }
 
     const state = store.state;
@@ -125,7 +129,7 @@ export class Settings implements m.ClassComponent<SettingsAttrs> {
       {
         key: 'presets',
         label: t(locale, 'searchPin.presets'),
-        icon: 'bookmark',
+        icon: 'near_me',
       },
       {
         key: 'about',
@@ -491,35 +495,20 @@ export class Settings implements m.ClassComponent<SettingsAttrs> {
           m(Icon, {icon: 'psychology', className: 'openperfetto-settings__about-icon'}),
         ]),
         m('.openperfetto-settings__about-title', 'OpenPerfetto'),
-        m('.openperfetto-settings__about-version', 'Version 1.0.0 (Phase 5)'),
+        m('.openperfetto-settings__about-version', 'Version 0.10'),
         m(
           '.openperfetto-settings__about-description',
           locale === 'zh'
-            ? 'AI 增强的 Android 性能追踪分析工具。集成智能 Agent 实现自动化 trace 分析。'
-            : 'AI-enhanced Android performance trace analyzer. Integrates intelligent Agent for automated trace analysis.',
+            ? m.fragment({}, [
+                m('div', 'AI 增强的 Trace 分析工具'),
+                m('div', '集成AI Agent 实现各类问题自动化 Trace 分析'),
+              ])
+            : m.fragment({}, [
+                m('div', 'AI-Enhanced Trace Analysis Tool'),
+                m('div', 'Integrated AI Agent for Automated Trace Analysis'),
+              ]),
         ),
-        m('.openperfetto-settings__about-links', [
-          m(
-            'a.openperfetto-settings__about-link',
-            {
-              href: 'https://perfetto.dev',
-              target: '_blank',
-            },
-            [m(Icon, {icon: 'open_in_new'}), 'Perfetto Documentation'],
-          ),
-          m(
-            'a.openperfetto-settings__about-link',
-            {
-              href: 'https://github.com/nicekwell',
-              target: '_blank',
-            },
-            [m(Icon, {icon: 'code'}), 'Source Code'],
-          ),
-        ]),
-        m(
-          '.openperfetto-settings__about-copyright',
-          '© 2026 The Android Open Source Project',
-        ),
+
       ]),
     ]);
   }

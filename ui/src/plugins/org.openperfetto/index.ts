@@ -24,6 +24,7 @@ import {AgentLoop} from './agent/agent_loop';
 import {focusSearchInput} from './sidebar/search_pin';
 import {syncMarkerRegistry} from './sidebar/marker_registry';
 import {opLogger} from './utils/logger';
+import {assetSrc} from '../../base/assets';
 import {
   OpenPerfettoState,
   createDefaultState,
@@ -358,7 +359,7 @@ async function handleMarkerShortcut(): Promise<void> {
         processName: processName || '',
         threadName: threadName || '',
         sliceName: sliceName || '',
-        color: '#34a853',
+        color: '#525252',
         timelineState,
         relatedTrackUri,
       };
@@ -400,7 +401,7 @@ async function handleMarkerShortcut(): Promise<void> {
         processName: '',
         threadName: '',
         sliceName: '',
-        color: '#34a853',
+        color: '#525252',
         timelineState,
         relatedTrackUri: '',
       };
@@ -443,7 +444,7 @@ function createPerfettoNote(trace: Trace, ts: bigint, _dur: bigint): string {
     const time = Time.fromRaw(ts);
     const noteId = trace.notes.addNote({
       timestamp: time,
-      color: '#34a853',
+      color: '#525252',
       text: 'User Marker',
     });
     opLogger.debug('createPerfettoNote: note created', {noteId, ts: ts.toString()});
@@ -559,7 +560,7 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
       toggleButton.className = 'openperfetto-toggle-btn';
       toggleButton.title = 'Open OpenPerfetto AI';
       toggleButton.style.display = 'none'; // 侧边栏开启时隐藏
-      toggleButton.innerHTML = '<i class="pf-icon">psychology</i>';
+      toggleButton.innerHTML = `<img src="${assetSrc('assets/openperfetto-logo.png')}" class="openperfetto-toggle-btn__logo" />`;
       toggleButton.addEventListener('click', openSidebar);
       document.body.appendChild(toggleButton);
     }
@@ -646,16 +647,6 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
           onCollapse: closeSidebar,
         });
       },
-    });
-
-    // 6. 在旧侧边栏 "Current Trace" 区域添加菜单入口
-    ctx.sidebar.addMenuItem({
-      section: 'current_trace',
-      text: 'OpenPerfetto AI',
-      href: '#!/openperfetto',
-      icon: 'psychology',
-      sortOrder: 5,
-      tooltip: 'AI-powered trace analysis',
     });
 
     // 7. 注册资源清理（trace 卸载时执行）

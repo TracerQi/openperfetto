@@ -42,7 +42,7 @@ export function syncMarkerRegistry(markers: AIMarker[]): void {
       index: i + 1,
       isAI: m.isAI,
       note: m.note || m.name,
-      color: m.color || '#4285f4',
+      color: m.color || '#525252',
     });
   });
   (window as any).__openperfettoMarkerRegistry = registry;

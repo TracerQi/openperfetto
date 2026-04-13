@@ -235,7 +235,7 @@ export const migrateState: Migrate<OpenPerfettoState> = (
         if (marker.processName === undefined) marker.processName = '';
         if (marker.threadName === undefined) marker.threadName = '';
         if (marker.sliceName === undefined) marker.sliceName = '';
-        if (marker.color === undefined) marker.color = '#4285f4';
+        if (marker.color === undefined) marker.color = '#525252';
       }
     }
     state.version = 5;

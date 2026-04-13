@@ -140,13 +140,15 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
    */
   private renderEmpty(locale: 'zh' | 'en'): m.Children {
     return m('.openperfetto-markers__empty', [
-      m(Icon, {icon: 'bookmark_border'}),
-      m('span', t(locale, 'markers.noMarkers')),
+      m('.openperfetto-markers__empty-title', [
+        m(Icon, {icon: 'near_me'}),
+        m('span', t(locale, 'markers.noMarkers')),
+      ]),
       m(
         '.openperfetto-markers__hint',
         locale === 'zh'
-          ? '选中Slice后按E键添加标记，或由AI自动标记'
-          : 'Select a slice and press E to add marker, or let AI mark automatically',
+          ? '选中Slice/鼠标位置 按E键添加标记；或由AI自动标记'
+          : 'Select a Slice or hover, press E to add a marker; or let AI mark automatically',
       ),
     ]);
   }
@@ -195,13 +197,13 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
         // 左侧：圆形序号 + AI图标
         m('.openperfetto-markers__item-left', [
           m('.openperfetto-markers__index-circle', {
-            style: {backgroundColor: marker.color || '#4285f4'},
+            style: {backgroundColor: marker.color || '#525252'}
           }, `${index}`),
           marker.isAI &&
             m('.openperfetto-markers__ai-badge', {
               title: 'AI Marker',
             }, [
-              m(Icon, {icon: 'smart_toy'}),
+              m(Icon, {icon: 'robot_2'}),
             ]),
         ]),
 
@@ -491,7 +493,7 @@ export class MarkersJump implements m.ClassComponent<MarkersJumpAttrs> {
             processName: (data.processName as string) ?? '',
             threadName: (data.threadName as string) ?? '',
             sliceName: (data.sliceName as string) ?? '',
-            color: (data.color as string) ?? '#4285f4',
+            color: (data.color as string) ?? '#525252',
             timelineState: data.timelineState
               ? {
                   visibleWindowStart: (data.timelineState as any).visibleWindowStart as string,

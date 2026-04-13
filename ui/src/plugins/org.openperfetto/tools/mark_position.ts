@@ -53,7 +53,7 @@ AI-created markers are visually distinguished.`,
         color: {
           type: 'string',
           description: 'Marker color (hex)',
-          default: '#4285f4',
+          default: '#525252',
         },
       },
       required: ['note'],
@@ -70,7 +70,7 @@ AI-created markers are visually distinguished.`,
 
   async execute(args: Record<string, unknown>): Promise<ToolExecutionResult> {
     const note = args.note as string;
-    const color = (args.color as string) || '#4285f4';
+    const color = (args.color as string) || '#525252';
 
     const startTime = performance.now();
 

@@ -191,22 +191,22 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
       m(
         '.ai-chat__welcome-text',
         locale === 'zh'
-          ? '描述你想分析的性能问题，我将帮助你找到根因。'
+          ? '请描述需要分析的性能问题，我将帮助你找到根因。'
           : 'Describe the performance issue you want to analyze, and I will help you find the root cause.',
       ),
       m('.ai-chat__welcome-examples', [
         m(
           '.ai-chat__welcome-examples-title',
-          locale === 'zh' ? '示例问题：' : 'Example questions:',
+          locale === 'zh' ? '示例：' : 'Examples:',
         ),
         m('.ai-chat__welcome-example', [
-          m('span', locale === 'zh' ? '• 分析这个 trace 中的滑动卡顿' : '• Analyze the scroll jank in this trace'),
+          m('span', locale === 'zh' ? '• 拆解Settings的冷启动慢耗时原因' : '• Break down the slow cold startup latency of Settings'),
         ]),
         m('.ai-chat__welcome-example', [
-          m('span', locale === 'zh' ? '• 查找冷启动慢的原因' : '• Find the cause of slow cold startup'),
+          m('span', locale === 'zh' ? '• 拆解YouTube播放视频过程中的高负载占用' : '• Break down the high CPU usage during YouTube video playback'),
         ]),
         m('.ai-chat__welcome-example', [
-          m('span', locale === 'zh' ? '• 这个 ANR 是什么导致的' : '• What caused this ANR'),
+          m('span', locale === 'zh' ? '• 分析Trace中Launcher的ANR原因' : '• Analyze the cause of Launcher ANR in the trace'),
         ]),
       ]),
     ]);
@@ -255,7 +255,7 @@ export class AIChat implements m.ClassComponent<AIChatAttrs> {
 
     const roleIcons: Record<string, string> = {
       user: 'person',
-      assistant: 'smart_toy',
+      assistant: 'robot_2',
       system: 'info',
       tool: 'build',
     };

@@ -16,8 +16,8 @@ import m from 'mithril';
 import {Store} from '../../../base/store';
 import {OpenPerfettoState, ConnectionState} from '../types/plugin_state';
 import {t} from '../i18n';
-import {Icon} from '../../../widgets/icon';
 import {Button} from '../../../widgets/button';
+import {assetSrc} from '../../../base/assets';
 
 export interface TopBarAttrs {
   store: Store<OpenPerfettoState>;
@@ -40,10 +40,7 @@ export class TopBar implements m.ClassComponent<TopBarAttrs> {
     return m('.openperfetto-topbar', [
       // Logo 和项目名
       m('.openperfetto-topbar__brand', [
-        m(Icon, {
-          icon: 'psychology',
-          className: 'openperfetto-topbar__logo',
-        }),
+        m(`img[src=${assetSrc('assets/openperfetto-logo.png')}].openperfetto-topbar__logo`),
         m('span.openperfetto-topbar__title', t(state.locale, 'topbar.title')),
       ]),
 

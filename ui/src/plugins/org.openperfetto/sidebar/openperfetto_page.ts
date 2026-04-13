@@ -110,7 +110,7 @@ export class OpenPerfettoPage
           this.renderModule(
             'markers',
             t(state.locale, 'markers.title'),
-            'bookmark',
+            'near_me',
             state.locale,
             m(MarkersJump, {
               trace,
@@ -124,7 +124,7 @@ export class OpenPerfettoPage
           this.renderModule(
             'aiChat',
             t(state.locale, 'aiChat.title'),
-            'smart_toy',
+            'robot_2',
             state.locale,
             m(AIChat, {
               trace,
@@ -141,7 +141,6 @@ export class OpenPerfettoPage
         m('.openperfetto-page__footer', [
           m(Button, {
             icon: 'settings',
-            label: t(state.locale, 'settings.title'),
             onclick: () => {
               this.settingsOpen = true;
               m.redraw();
