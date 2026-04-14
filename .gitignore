@@ -41,6 +41,8 @@ node_modules/
 /out*
 /ui/dist
 /venv/*
+/server/dist/
+/tmp/
 depot_tools/
 examples/sdk/build/
 gha-creds-*.json
