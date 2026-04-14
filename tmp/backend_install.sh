@@ -1,5 +1,6 @@
 #!/bin/bash
 export NVM_DIR=/home/tracerqi/.nvm
 source /home/tracerqi/.nvm/nvm.sh
-cd /mnt/d/1aLq/ProFile/perfetto/server
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/../server"
 npm install 2>&1

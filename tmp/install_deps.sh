@@ -1,5 +1,6 @@
 #!/bin/bash
 export NVM_DIR=/home/tracerqi/.nvm
 source /home/tracerqi/.nvm/nvm.sh
-cd /mnt/d/1aLq/ProFile/perfetto
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 python3 tools/install-build-deps --ui 2>&1

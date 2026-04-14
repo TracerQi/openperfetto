@@ -4,7 +4,8 @@ set -e
 export NVM_DIR=/home/tracerqi/.nvm
 source /home/tracerqi/.nvm/nvm.sh
 
-PERFETTO=/mnt/d/1aLq/ProFile/perfetto
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PERFETTO="$SCRIPT_DIR/.."
 BT=$PERFETTO/buildtools/linux64
 mkdir -p $BT
 

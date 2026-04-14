@@ -21,7 +21,7 @@ import {Store} from '../../base/store';
 import {OpenPerfettoPage} from './sidebar/openperfetto_page';
 import {WebSocketClient} from './services/websocket_client';
 import {AgentLoop} from './agent/agent_loop';
-import {focusSearchInput} from './sidebar/search_pin';
+// [Ctrl+F 恢复时需取消注释] import {focusSearchInput} from './sidebar/search_pin';
 import {syncMarkerRegistry} from './sidebar/marker_registry';
 import {opLogger} from './utils/logger';
 import {assetSrc} from '../../base/assets';
@@ -500,19 +500,28 @@ export default class OpenPerfettoPlugin implements PerfettoPlugin {
     wsClient.setUrl('ws://localhost:3001/ws');
     wsClient.connect();
 
-    // Ctrl+F 快捷键拦截：将浏览器默认搜索转向新搜索框
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault();
-        e.stopPropagation();
-        // 如果侧边栏关闭则打开
-        if (sidebarState === 'closed') {
-          openSidebar();
-        }
-        // 延迟聚焦，确保 DOM 已更新
-        setTimeout(() => focusSearchInput(), 50);
-      }
-    });
+    // ─────────────────────────────────────────────────────────────
+    // [Ctrl+F 快捷键拦截] 当前已禁用 (2026-04-13)
+    //
+    // 原因：Ctrl+F 应保留为浏览器原生搜索功能，用户需手动点击
+    //       OpenPerfetto 搜索框才能进入搜索与置顶模块的搜索功能。
+    //
+    // 恢复方案：取消下方注释块即可重新启用 Ctrl+F 拦截功能。
+    //         拦截生效后，按 Ctrl+F 会自动打开侧边栏并聚焦搜索框，
+    //         而非触发浏览器原生搜索。
+    // ─────────────────────────────────────────────────────────────
+    // document.addEventListener('keydown', (e: KeyboardEvent) => {
+    //   if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    //     e.preventDefault();
+    //     e.stopPropagation();
+    //     // 如果侧边栏关闭则打开
+    //     if (sidebarState === 'closed') {
+    //       openSidebar();
+    //     }
+    //     // 延迟聚焦，确保 DOM 已更新
+    //     setTimeout(() => focusSearchInput(), 50);
+    //   }
+    // });
 
     // 快捷键 E：在当前选中位置或鼠标悬停位置添加标记
     document.addEventListener('keydown', (e: KeyboardEvent) => {

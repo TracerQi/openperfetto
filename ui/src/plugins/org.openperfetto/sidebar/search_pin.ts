@@ -22,7 +22,7 @@
  * - Pin/Go 操作
  * - 搜索历史：仅搜索框聚焦时显示，点击即搜，文本缩略+tooltip
  * - 预置 Pin 场景：应用失败提示
- * - Ctrl+F 快捷键拦截
+ * - Ctrl+F 快捷键拦截（当前已禁用，恢复见 index.ts onActivate 中注释块）
  * - AI 置顶接口预留
  */
 
@@ -43,6 +43,7 @@ const MAX_HISTORY_SIZE = 10;
 
 /**
  * 全局输入框引用，供 Ctrl+F 外部调用聚焦
+ * 注意：Ctrl+F 拦截当前已禁用，此引用在恢复后重新启用
  */
 let globalSearchInputEl: HTMLInputElement | null = null;
 

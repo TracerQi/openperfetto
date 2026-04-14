@@ -1,6 +1,7 @@
 #!/bin/bash
-cd /mnt/d/1aLq/ProFile/perfetto
-export PATH=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/nodejs/bin:/usr/bin:/bin
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+export PATH="$SCRIPT_DIR/buildtools/linux64/nodejs/bin:/usr/bin:/bin"
 
 # Find all .sql files
 SQL_FILES=$(find src/trace_processor/perfetto_sql/stdlib -name '*.sql' | sort)

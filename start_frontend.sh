@@ -4,7 +4,8 @@
 # 后续文件修改 watch 自动增量编译，仅需几秒
 
 # 清理已有构建实例（与 run_build.sh 一致的逻辑）
-cd /mnt/d/1aLq/ProFile/perfetto
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 LOCKFILE=out/ui/watch.lock
 if [ -f "$LOCKFILE" ]; then
   OLD_PID=$(cat "$LOCKFILE" 2>/dev/null | tr -d '[:space:]')
@@ -23,8 +24,8 @@ pkill -f 'tsc --project.*perfetto.*--watch' 2>/dev/null
 pkill -f 'rollup.*perfetto.*--watch' 2>/dev/null
 sleep 1
 
-export PATH=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/perfetto/third_party/gn:/mnt/d/1aLq/ProFile/perfetto/third_party/ninja:/usr/bin:/bin
-export EMSDK=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk
-export EM_CONFIG=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk/.emscripten
+export PATH="$SCRIPT_DIR/buildtools/linux64/nodejs/bin:$SCRIPT_DIR/third_party/gn:$SCRIPT_DIR/third_party/ninja:/usr/bin:/bin"
+export EMSDK="$SCRIPT_DIR/buildtools/linux64/emsdk"
+export EM_CONFIG="$SCRIPT_DIR/buildtools/linux64/emsdk/.emscripten"
 export NODE_OPTIONS=--max-old-space-size=8192
 node ui/build.js --no-depscheck --no-wasm --only-wasm-memory64 --no-override-gn-args --serve --watch 2>&1
