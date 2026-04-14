@@ -11,7 +11,7 @@
 ### 1.1 前端启动（WSL 终端 1）
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto
+cd /mnt/d/1aLq/ProFile/openperfetto
 bash run_build.sh
 ```
 
@@ -19,11 +19,11 @@ bash run_build.sh
 
 ```bash
 #!/bin/bash
-rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock
-cd /mnt/d/1aLq/ProFile/perfetto
-export PATH=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/perfetto/third_party/gn:/mnt/d/1aLq/ProFile/perfetto/third_party/ninja:/usr/bin:/bin
-export EMSDK=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk
-export EM_CONFIG=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk/.emscripten
+rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock
+cd /mnt/d/1aLq/ProFile/openperfetto
+export PATH=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/openperfetto/third_party/gn:/mnt/d/1aLq/ProFile/openperfetto/third_party/ninja:/usr/bin:/bin
+export EMSDK=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/emsdk
+export EM_CONFIG=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/emsdk/.emscripten
 export NODE_OPTIONS=--max-old-space-size=8192
 node ui/build.js --no-depscheck --only-wasm-memory64 --no-override-gn-args --serve --watch 2>&1
 ```
@@ -42,7 +42,7 @@ node ui/build.js --no-depscheck --only-wasm-memory64 --no-override-gn-args --ser
 ### 1.2 后端启动（WSL 终端 2）
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto/server
+cd /mnt/d/1aLq/ProFile/openperfetto/server
 npm run dev
 ```
 
@@ -81,7 +81,7 @@ npm run dev
 - 如果已停止，重新启动即可：
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto/server
+cd /mnt/d/1aLq/ProFile/openperfetto/server
 npm run dev
 ```
 

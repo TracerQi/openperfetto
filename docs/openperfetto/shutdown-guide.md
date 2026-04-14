@@ -19,7 +19,7 @@
 
 ```powershell
 # 1. 清理前端构建进程和锁文件
-wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh
 
 # 2. 清理后端 Node.js 进程
 wsl bash -c "pkill -f 'tsx watch' 2>/dev/null; pkill -f 'node.*server' 2>/dev/null; pkill -f 'node.*tsx' 2>/dev/null"
@@ -39,7 +39,7 @@ foreach ($port in @(10000, 10001, 3001)) {
 ### 第一步：关闭前端
 
 ```powershell
-wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh
 ```
 
 此脚本会：
@@ -84,13 +84,13 @@ wsl bash -c "ps aux | grep -E 'build.js|node.*server|tsx' | grep -v grep | wc -l
 ### 前端
 
 ```powershell
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash run_build.sh"
 ```
 
 ### 后端（新开终端窗口）
 
 ```powershell
-wsl bash -c "cd /mnt/d/1aLq/ProFile/perfetto/server; npm run dev"
+wsl bash -c "cd /mnt/d/1aLq/ProFile/openperfetto/server; npm run dev"
 ```
 
 ---

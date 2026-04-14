@@ -19,13 +19,13 @@ foreach ($port in @(10000, 10001)) {
     Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
   if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
 }
-wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh
 
 # 2. 等待端口完全释放（约 2-3 秒）
 Start-Sleep -Seconds 3
 
 # 3. 启动增量编译 + dev server（WSL 内执行）
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash run_build.sh"
 ```
 
 编译完成后 dev server 自动监听 **http://localhost:10000**（输出 `HTTP server is listening on http://localhost:10000`），刷新浏览器即可看到最新改动。
@@ -34,10 +34,10 @@ wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aL
 
 > **纯前端修改提速**：如果仅修改了 TypeScript/SCSS，未涉及 C++/WASM，可用 `start_frontend.sh`（含 `--no-wasm` 参数），跳过 WASM 编译，构建约 5-8 分钟（vs `run_build.sh` 的 8-10 分钟）：
 > ```powershell
-> wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash start_frontend.sh"
+> wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash start_frontend.sh"
 > ```
 
-> **常见陷阱：残留多实例**：如果之前的会话未正常退出，WSL 内可能残留多组 build.js 进程（可通过 `wsl ps aux | grep build.js | grep -v grep` 检查），多实例互相冲突会导致 dev server 启动失败。此时必须先执行 `wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh` 清理所有残留进程，再启动新的编译。
+> **常见陷阱：残留多实例**：如果之前的会话未正常退出，WSL 内可能残留多组 build.js 进程（可通过 `wsl ps aux | grep build.js | grep -v grep` 检查），多实例互相冲突会导致 dev server 启动失败。此时必须先执行 `wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh` 清理所有残留进程，再启动新的编译。
 
 ---
 
@@ -80,9 +80,9 @@ foreach ($port in @(10000, 10001)) {
     Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
   if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
 }
-wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh
 Start-Sleep -Seconds 3
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash start_frontend.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash start_frontend.sh"
 ```
 
 **涉及 C++/WASM 修改（约 8-10 分钟）**
@@ -90,7 +90,7 @@ wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aL
 使用 `run_build.sh` 完整重编：
 
 ```powershell
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash run_build.sh"
 ```
 
 **验证编译完成**
@@ -98,7 +98,7 @@ wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aL
 看到 `HTTP server is listening on http://localhost:10000` 输出后，检查 TSC 输出文件时间戳：
 
 ```bash
-wsl ls -la /mnt/d/1aLq/ProFile/perfetto/out/ui/ui/tsc/frontend/index.js
+wsl ls -la /mnt/d/1aLq/ProFile/openperfetto/out/ui/ui/tsc/frontend/index.js
 ```
 
 确认时间戳与修改时间一致，然后刷新浏览器。
@@ -111,14 +111,14 @@ wsl ls -la /mnt/d/1aLq/ProFile/perfetto/out/ui/ui/tsc/frontend/index.js
 
 ```bash
 # 在后端终端中 Ctrl+C 停止，然后：
-cd /mnt/d/1aLq/ProFile/perfetto/server
+cd /mnt/d/1aLq/ProFile/openperfetto/server
 npm run dev
 ```
 
 **生产编译**
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto/server
+cd /mnt/d/1aLq/ProFile/openperfetto/server
 npm run build
 ```
 
@@ -127,7 +127,7 @@ npm run build
 修改 `src/` 目录下的 C++ 代码后，Ninja 增量编译只重编修改的文件：
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto
+cd /mnt/d/1aLq/ProFile/openperfetto
 bash run_build.sh
 ```
 
@@ -141,11 +141,11 @@ bash run_build.sh
 
 ```bash
 # 方式 1：删除 args.gn 后重新运行（自动 gn gen）
-rm /mnt/d/1aLq/ProFile/perfetto/out/ui/args.gn
+rm /mnt/d/1aLq/ProFile/openperfetto/out/ui/args.gn
 bash run_build.sh
 
 # 方式 2：手动执行 gn gen
-export PATH=/mnt/d/1aLq/ProFile/perfetto/third_party/gn:$PATH
+export PATH=/mnt/d/1aLq/ProFile/openperfetto/third_party/gn:$PATH
 gn gen out/ui --args='is_debug=false'
 bash run_build.sh
 ```
@@ -165,9 +165,9 @@ bash run_build.sh
 ### 3.1 环境变量设置（复制即用）
 
 ```bash
-export PATH=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/perfetto/third_party/gn:/mnt/d/1aLq/ProFile/perfetto/third_party/ninja:/usr/bin:/bin
-export EMSDK=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk
-export EM_CONFIG=/mnt/d/1aLq/ProFile/perfetto/buildtools/linux64/emsdk/.emscripten
+export PATH=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/nodejs/bin:/mnt/d/1aLq/ProFile/openperfetto/third_party/gn:/mnt/d/1aLq/ProFile/openperfetto/third_party/ninja:/usr/bin:/bin
+export EMSDK=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/emsdk
+export EM_CONFIG=/mnt/d/1aLq/ProFile/openperfetto/buildtools/linux64/emsdk/.emscripten
 export NODE_OPTIONS=--max-old-space-size=8192
 ```
 
@@ -187,16 +187,16 @@ foreach ($port in @(10000, 10001)) {
     Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique
   if ($proc) { $proc | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
 }
-wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh
+wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh
 
 # 第 2 步：等待端口释放
 Start-Sleep -Seconds 3
 
 # 第 3 步-A：含 C++/WASM 修改时使用（约 8-10 分钟）
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash run_build.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash run_build.sh"
 
 # 第 3 步-B：仅修改 TypeScript/SCSS 时使用（约 5-8 分钟，跳过 WASM）
-wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/perfetto; bash start_frontend.sh"
+wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock; cd /mnt/d/1aLq/ProFile/openperfetto; bash start_frontend.sh"
 ```
 
 > **实战提示**：
@@ -222,7 +222,7 @@ wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock; cd /mnt/d/1aL
 ### 3.3 后端构建命令
 
 ```bash
-cd /mnt/d/1aLq/ProFile/perfetto/server
+cd /mnt/d/1aLq/ProFile/openperfetto/server
 
 # 开发模式（tsx watch 自动重启）
 npm run dev
@@ -262,12 +262,12 @@ wsl curl http://localhost:3001/health
 | Node.js OOM | FATAL ERROR: Allocation failed | 确认 `NODE_OPTIONS=--max-old-space-size=8192` |
 | Rollup SCSS 错误 | Could not resolve '.scss' | 使用 `styles.scss` 包装文件，勿在 TS 中直接 import |
 | CSP 阻止 WebSocket | Console 报 CSP violation | 检查 `ui/src/frontend/index.ts` 中 `connect-src` 配置 |
-| 端口被占用 / dev server 回退 | `Port 10000 is in use, trying 10001...` 或 EADDRINUSE | **双重清理**（Windows 侧 + WSL 侧）：**PowerShell**: `foreach($p in @(10000,10001)){$proc=Get-NetTCPConnection -LocalPort $p -EA 0 \| Select -Exp OwningProcess \| Sort -Unique; if($proc){$proc \| %{Stop-Process -Id $_ -Force}}}` + **WSL**: `wsl bash -c "fuser -k 10000/tcp; fuser -k 10001/tcp; bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh"`，等待 3 秒后重试 |
-| WSL 内残留多组 build.js 进程 | 端口全部空闲但 dev server 启动失败，`wsl ps aux \| grep build.js` 显示多组进程 | `wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh` 一键清理所有残留构建进程 + 锁文件，然后重新启动 |
+| 端口被占用 / dev server 回退 | `Port 10000 is in use, trying 10001...` 或 EADDRINUSE | **双重清理**（Windows 侧 + WSL 侧）：**PowerShell**: `foreach($p in @(10000,10001)){$proc=Get-NetTCPConnection -LocalPort $p -EA 0 \| Select -Exp OwningProcess \| Sort -Unique; if($proc){$proc \| %{Stop-Process -Id $_ -Force}}}` + **WSL**: `wsl bash -c "fuser -k 10000/tcp; fuser -k 10001/tcp; bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh"`，等待 3 秒后重试 |
+| WSL 内残留多组 build.js 进程 | 端口全部空闲但 dev server 启动失败，`wsl ps aux \| grep build.js` 显示多组进程 | `wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh` 一键清理所有残留构建进程 + 锁文件，然后重新启动 |
 | `.ninja_log` 损坏 | premature end of file | Ninja 自动恢复，无需处理 |
 | Python 3.8 不兼容 | AttributeError: removesuffix | 避免使用 3.9+ 新语法（如 `removesuffix`），改用切片 `str[:-4]` |
 | pnpm lockfile 不同步 | frozen-lockfile 失败 | 使用 `--no-depscheck` 跳过（`run_build.sh` 已包含） |
-| build.js 锁冲突 | a build.js instance is already running | `wsl bash -c "rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock"`（`run_build.sh` 启动时自动清除）。或使用 `wsl bash /mnt/d/1aLq/ProFile/perfetto/kill_build.sh` 一键清理 |
+| build.js 锁冲突 | a build.js instance is already running | `wsl bash -c "rm -f /mnt/d/1aLq/ProFile/openperfetto/out/ui/watch.lock"`（`run_build.sh` 启动时自动清除）。或使用 `wsl bash /mnt/d/1aLq/ProFile/openperfetto/kill_build.sh` 一键清理 |
 | dev server 端口回退后如何恢复 | 浏览器访问 10001 但功能异常 | Ctrl+C 终止编译 → 杀端口（Windows + WSL 双重清理）→ 等待 3 秒 → 重新启动编译 |
 
 ---

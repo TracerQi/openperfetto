@@ -1,6 +1,7 @@
 #!/bin/bash
 # 一键清理所有构建相关进程 + 锁文件
 # 包括：build.js 主进程、tsc --watch 子进程、rollup --watch 子进程
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 pkill -f 'node ui/build.js' 2>/dev/null
 pkill -f 'tsc --project.*--watch' 2>/dev/null
 pkill -f 'rollup.*--watch' 2>/dev/null
@@ -10,7 +11,7 @@ sleep 1
 pkill -9 -f 'node ui/build.js' 2>/dev/null
 pkill -9 -f 'tsc --project' 2>/dev/null
 pkill -9 -f 'rollup' 2>/dev/null
-rm -f /mnt/d/1aLq/ProFile/perfetto/out/ui/watch.lock
+rm -f "$SCRIPT_DIR/out/ui/watch.lock"
 # 验证清理结果
 REMAINING=$(ps aux | grep -E 'build.js|tsc --project|rollup' | grep -v grep | wc -l)
 if [ "$REMAINING" -gt 0 ]; then
